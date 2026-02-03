@@ -53,3 +53,4 @@ BoxOfficeGo is a movie ticket booking platform with a Go-based backend and an An
 - Seat selection and ticket booking
 - Booking management (view/cancel/download ticket)
 - Admin management for movies, theaters, and pricing tiers
+
