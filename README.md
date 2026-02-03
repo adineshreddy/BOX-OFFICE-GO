@@ -1,7 +1,7 @@
 # BoxOfficeGo
 
 ## Project Description
-BoxOfficeGo is a movie ticket booking platform with a Go-based backend and an Angular frontend. The system will allow users to browse movies and showtimes, select seats, and book tickets, while admins can manage movies, theaters and pricing.
+BoxOfficeGo is a movie ticket booking platform with a Go-based backend and an Angular frontend. The system will allow users to browse movies and showtimes, select seats, and book tickets, while admins can manage movies, theaters, and pricing.
 
 ## Members
 ### Front-end
@@ -53,3 +53,4 @@ BoxOfficeGo is a movie ticket booking platform with a Go-based backend and an An
 - Seat selection and ticket booking
 - Booking management (view/cancel/download ticket)
 - Admin management for movies, theaters, and pricing tiers
+
