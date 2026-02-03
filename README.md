@@ -1,7 +1,7 @@
-# Box Office Go
+# BoxOfficeGo
 
 ## Project Description
-Box Office Go is a movie ticket booking platform with a Go-based backend and an Angular frontend. The system will allow users to browse movies and showtimes, select seats, and book tickets, while admins can manage movies, theaters, and pricing.
+BoxOfficeGo is a movie ticket booking platform with a Go-based backend and an Angular frontend. The system will allow users to browse movies and showtimes, select seats, and book tickets, while admins can manage movies, theaters, and pricing.
 
 ## Members
 ### Front-end
@@ -15,7 +15,7 @@ Box Office Go is a movie ticket booking platform with a Go-based backend and an 
 	</thead>
 	<tbody>
 		<tr>
-			<td style="border: 1px solid #000;"><a href="https://github.com/sandeepelluri11">Venkata Sahith Bathini</a></td>
+			<td style="border: 1px solid #000;"><a href="https://github.com/bvsahith">Venkata Sahith Bathini</a></td>
 			<td style="border: 1px solid #000;">95306942</td>
 		</tr>
 		<tr>
