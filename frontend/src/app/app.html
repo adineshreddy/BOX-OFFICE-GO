@@ -1,0 +1,122 @@
+<header class="app-header">
+  <a routerLink="/" class="logo">
+    <span class="logo-icon" aria-hidden="true">🎬</span>
+    <span class="logo-text">Box Office Go</span>
+  </a>
+  <nav class="auth-nav">
+    @if (auth.isLoggedIn()) {
+      <button type="button" class="btn btn-ghost" (click)="auth.logout()">Log out</button>
+    } @else {
+      <a routerLink="/login" class="btn btn-ghost">Sign in</a>
+      <a routerLink="/signup" class="btn btn-primary">Sign up</a>
+    }
+  </nav>
+</header>
+
+<style>
+  .app-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.875rem 2rem;
+    background: linear-gradient(135deg, rgba(15, 15, 22, 0.97) 0%, rgba(26, 24, 42, 0.97) 100%);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(255, 255, 255, 0.03) inset;
+    backdrop-filter: blur(12px);
+    position: relative;
+  }
+  .app-header::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(167, 139, 250, 0.25), transparent);
+    opacity: 0.6;
+  }
+  .logo {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.625rem;
+    text-decoration: none;
+    color: #fff;
+    font-weight: 700;
+    font-size: 1.25rem;
+    letter-spacing: -0.02em;
+    transition: transform 0.2s ease, opacity 0.2s ease;
+  }
+  .logo:hover {
+    opacity: 0.95;
+    transform: translateY(-1px);
+  }
+  .logo-icon {
+    font-size: 1.5rem;
+    line-height: 1;
+    filter: drop-shadow(0 0 8px rgba(167, 139, 250, 0.4));
+  }
+  .logo-text {
+    background: linear-gradient(135deg, #fff 0%, rgba(226, 232, 240, 0.9) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .auth-nav {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+  .auth-nav .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.5rem 1.125rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    border-radius: 10px;
+    text-decoration: none;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border: none;
+    font-family: inherit;
+  }
+  .auth-nav .btn-ghost {
+    color: rgba(255, 255, 255, 0.85);
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+  .auth-nav .btn-ghost:hover {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.15);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  }
+  .auth-nav .btn-primary {
+    color: #fff;
+    background: linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%);
+    border: 1px solid rgba(167, 139, 250, 0.4);
+    box-shadow: 0 2px 12px rgba(124, 58, 237, 0.35);
+  }
+  .auth-nav .btn-primary:hover {
+    background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%);
+    box-shadow: 0 4px 20px rgba(124, 58, 237, 0.45);
+    transform: translateY(-1px);
+  }
+  .auth-nav .btn-primary:active,
+  .auth-nav .btn-ghost:active {
+    transform: translateY(0);
+  }
+</style>
+
+<style>
+  :host {
+    font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+      Helvetica, Arial, sans-serif;
+    box-sizing: border-box;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+</style>
+
+<router-outlet />
