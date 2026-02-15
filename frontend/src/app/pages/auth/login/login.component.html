@@ -1,0 +1,32 @@
+<div class="auth-card">
+  <h1>Sign in</h1>
+  <p class="subtitle">Welcome back to Box Office Go</p>
+
+  @if (error) {
+    <div class="error" role="alert">{{ error }}</div>
+  }
+
+  <form [formGroup]="form" (ngSubmit)="onSubmit()">
+    <label>
+      <span>Email</span>
+      <input type="email" formControlName="email" placeholder="you@example.com" autocomplete="email" />
+      @if (form.get('email')?.invalid && form.get('email')?.touched) {
+        <span class="field-error">Enter a valid email</span>
+      }
+    </label>
+    <label>
+      <span>Password</span>
+      <input type="password" formControlName="password" placeholder="••••••••" autocomplete="current-password" />
+      @if (form.get('password')?.invalid && form.get('password')?.touched) {
+        <span class="field-error">Password is required</span>
+      }
+    </label>
+    <button type="submit" [disabled]="loading">
+      {{ loading ? 'Signing in…' : 'Sign in' }}
+    </button>
+  </form>
+
+  <p class="switch-auth">
+    Don't have an account? <a routerLink="/signup">Sign up</a>
+  </p>
+</div>

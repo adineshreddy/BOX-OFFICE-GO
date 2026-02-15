@@ -1,0 +1,39 @@
+<div class="auth-card">
+  <h1>Create account</h1>
+  <p class="subtitle">Join Box Office Go to book tickets</p>
+
+  @if (error) {
+    <div class="error" role="alert">{{ error }}</div>
+  }
+
+  <form [formGroup]="form" (ngSubmit)="onSubmit()">
+    <label>
+      <span>Name</span>
+      <input type="text" formControlName="name" placeholder="Your name" autocomplete="name" />
+      @if (form.get('name')?.invalid && form.get('name')?.touched) {
+        <span class="field-error">Name must be at least 2 characters</span>
+      }
+    </label>
+    <label>
+      <span>Email</span>
+      <input type="email" formControlName="email" placeholder="you@example.com" autocomplete="email" />
+      @if (form.get('email')?.invalid && form.get('email')?.touched) {
+        <span class="field-error">Enter a valid email</span>
+      }
+    </label>
+    <label>
+      <span>Password</span>
+      <input type="password" formControlName="password" placeholder="••••••••" autocomplete="new-password" />
+      @if (form.get('password')?.invalid && form.get('password')?.touched) {
+        <span class="field-error">Password must be at least 6 characters</span>
+      }
+    </label>
+    <button type="submit" [disabled]="loading">
+      {{ loading ? 'Creating account…' : 'Sign up' }}
+    </button>
+  </form>
+
+  <p class="switch-auth">
+    Already have an account? <a routerLink="/login">Sign in</a>
+  </p>
+</div>
