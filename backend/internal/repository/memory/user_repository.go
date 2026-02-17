@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"sync"
+	"time"
 
 	"box-office-go/backend/internal/domain"
 	"box-office-go/backend/internal/repository"
@@ -53,4 +54,20 @@ func (r *UserRepository) GetByEmail(_ context.Context, email string) (domain.Use
 	}
 
 	return user, nil
+}
+
+func (r *UserRepository) UpdateLastLogin(_ context.Context, userID string, loggedAt time.Time) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	user, found := r.users[userID]
+	if !found {
+		return repository.ErrUserNotFound
+	}
+
+	user.LastLoginAt = &loggedAt
+	user.UpdatedAt = loggedAt
+	r.users[userID] = user
+
+	return nil
 }

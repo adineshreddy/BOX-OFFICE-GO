@@ -83,3 +83,32 @@ SELECT id, name, phone, email, created_at
 FROM users
 ORDER BY created_at DESC;
 ```
+
+## Login API
+
+- **Method**: `POST`
+- **Path**: `/api/v1/auth/login`
+
+Request body:
+
+```json
+{
+  "email": "dinesh@example.com",
+  "password": "password123"
+}
+```
+
+## Test Login (curl)
+
+```bash
+curl -X POST http://localhost:8080/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email":"dinesh@example.com",
+    "password":"password123"
+  }'
+```
+
+Expected: HTTP `200` and user payload.
+
+Invalid password/email: HTTP `400` with `invalid email or password`.

@@ -57,3 +57,36 @@ func (s *AuthService) Signup(ctx context.Context, input domain.SignupInput) (dom
 
 	return createdUser, nil, nil
 }
+
+func (s *AuthService) Login(ctx context.Context, input domain.LoginInput) (domain.User, map[string]string, error) {
+	validationErrors := validation.ValidateLoginInput(input)
+	if len(validationErrors) > 0 {
+		return domain.User{}, validationErrors, nil
+	}
+
+	user, err := s.userRepository.GetByEmail(ctx, input.Email)
+	if err != nil {
+		if err == repository.ErrUserNotFound {
+			return domain.User{}, map[string]string{"credentials": "invalid email or password"}, nil
+		}
+		return domain.User{}, nil, fmt.Errorf("get user by email: %w", err)
+	}
+
+	if compareErr := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(input.Password)); compareErr != nil {
+		return domain.User{}, map[string]string{"credentials": "invalid email or password"}, nil
+	}
+
+	if !user.IsActive {
+		return domain.User{}, map[string]string{"account": "account is inactive"}, nil
+	}
+
+	now := time.Now().UTC()
+	if updateErr := s.userRepository.UpdateLastLogin(ctx, user.ID, now); updateErr != nil {
+		return domain.User{}, nil, fmt.Errorf("update last login: %w", updateErr)
+	}
+
+	user.LastLoginAt = &now
+	user.UpdatedAt = now
+
+	return user, nil, nil
+}

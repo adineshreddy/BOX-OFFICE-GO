@@ -17,6 +17,7 @@ func New(authService *service.AuthService) http.Handler {
 	})
 
 	mux.HandleFunc("POST /api/v1/auth/signup", authHandler.Signup)
+	mux.HandleFunc("POST /api/v1/auth/login", authHandler.Login)
 
 	return mux
 }

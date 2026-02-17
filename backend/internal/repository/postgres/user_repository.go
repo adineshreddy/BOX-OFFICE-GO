@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
 
@@ -110,4 +111,28 @@ func (r *UserRepository) GetByEmail(ctx context.Context, email string) (domain.U
 	}
 
 	return user, nil
+}
+
+func (r *UserRepository) UpdateLastLogin(ctx context.Context, userID string, loggedAt time.Time) error {
+	query := `
+	UPDATE users
+	SET last_login_at = $2, updated_at = $2
+	WHERE id = $1
+	`
+
+	result, err := r.db.ExecContext(ctx, query, userID, loggedAt)
+	if err != nil {
+		return err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+
+	if rowsAffected == 0 {
+		return repository.ErrUserNotFound
+	}
+
+	return nil
 }
