@@ -26,8 +26,12 @@ func main() {
 	}(db)
 
 	userRepository := postgres.NewUserRepository(db)
+	movieRepository := postgres.NewMovieRepository(db)
+
 	authService := service.NewAuthService(userRepository)
-	router := httpRouter.New(authService)
+	movieService := service.NewMovieService(movieRepository)
+
+	router := httpRouter.New(authService, movieService)
 
 	server := &http.Server{
 		Addr:    ":" + cfg.Port,

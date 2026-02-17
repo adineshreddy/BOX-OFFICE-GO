@@ -8,9 +8,10 @@ import (
 	"box-office-go/backend/internal/service"
 )
 
-func New(authService *service.AuthService) http.Handler {
+func New(authService *service.AuthService, movieService *service.MovieService) http.Handler {
 	mux := http.NewServeMux()
 	authHandler := handler.NewAuthHandler(authService)
+	movieHandler := handler.NewMovieHandler(movieService)
 
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) {
 		response.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
@@ -18,6 +19,7 @@ func New(authService *service.AuthService) http.Handler {
 
 	mux.HandleFunc("POST /api/v1/auth/signup", authHandler.Signup)
 	mux.HandleFunc("POST /api/v1/auth/login", authHandler.Login)
+	mux.HandleFunc("GET /api/v1/movies", movieHandler.ListMovies)
 
 	return mux
 }
