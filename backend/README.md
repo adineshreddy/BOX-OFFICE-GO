@@ -112,3 +112,74 @@ curl -X POST http://localhost:8080/api/v1/auth/login \
 Expected: HTTP `200` and user payload.
 
 Invalid password/email: HTTP `400` with `invalid email or password`.
+
+## Movie Theaters by Selected Movie API
+
+- **Method**: `GET`
+- **Path**: `/api/v1/movies/{movieId}/theaters`
+- **Optional Query**: `date=YYYY-MM-DD` (filters showtimes for that date)
+
+Example:
+
+```bash
+curl "http://localhost:8080/api/v1/movies/mov_001/theaters"
+```
+
+With date filter:
+
+```bash
+curl "http://localhost:8080/api/v1/movies/mov_001/theaters?date=2026-02-18"
+```
+
+### Behavior
+
+- Returns theater list for the selected movie with showtimes.
+- Uses many-to-many relation through `showtimes` (`movie_id` + `theater_id`).
+- Shows only active and upcoming showtimes.
+- Validates schedule quality: gap between consecutive showtime start times in the same theater must be greater than movie runtime.
+
+## Curl Commands for Non-Auth APIs
+
+### 1) Health Check
+
+```bash
+curl "http://localhost:8080/health"
+```
+
+### 2) List Movies
+
+```bash
+curl "http://localhost:8080/api/v1/movies"
+```
+
+### 3) List Movies (filter by title)
+
+```bash
+curl "http://localhost:8080/api/v1/movies?title=Starlight"
+```
+
+### 4) List Movies (filter by genre)
+
+```bash
+curl "http://localhost:8080/api/v1/movies?genre=Drama"
+```
+
+### 5) List Theaters + Showtimes for Selected Movie
+
+```bash
+curl "http://localhost:8080/api/v1/movies/mov_001/theaters"
+```
+
+```bash
+curl "http://localhost:8080/api/v1/movies/mov_002/theaters"
+```
+
+```bash
+curl "http://localhost:8080/api/v1/movies/mov_003/theaters"
+```
+
+### 6) List Theaters + Showtimes for Selected Movie on Specific Date
+
+```bash
+curl "http://localhost:8080/api/v1/movies/mov_001/theaters?date=2026-02-18"
+```

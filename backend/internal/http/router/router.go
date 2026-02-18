@@ -20,6 +20,7 @@ func New(authService *service.AuthService, movieService *service.MovieService) h
 	mux.HandleFunc("POST /api/v1/auth/signup", authHandler.Signup)
 	mux.HandleFunc("POST /api/v1/auth/login", authHandler.Login)
 	mux.HandleFunc("GET /api/v1/movies", movieHandler.ListMovies)
+	mux.HandleFunc("GET /api/v1/movies/{movieId}/theaters", movieHandler.ListTheatersByMovie)
 
 	return mux
 }
