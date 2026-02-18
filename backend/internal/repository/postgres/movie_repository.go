@@ -3,8 +3,10 @@ package postgres
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"box-office-go/backend/internal/domain"
 	"box-office-go/backend/internal/repository"
@@ -103,6 +105,133 @@ func (r *MovieRepository) ListActive(ctx context.Context, titleQuery string, gen
 	}
 
 	return movies, nil
+}
+
+func (r *MovieRepository) GetByID(ctx context.Context, movieID string) (domain.Movie, error) {
+	query := `
+	SELECT
+		id,
+		title,
+		description,
+		genre,
+		language,
+		duration_minutes,
+		release_date,
+		rating,
+		poster_url,
+		is_active,
+		created_at,
+		updated_at
+	FROM movies
+	WHERE id = $1
+	`
+
+	var movie domain.Movie
+	var posterURL sql.NullString
+
+	err := r.db.QueryRowContext(ctx, query, strings.TrimSpace(movieID)).Scan(
+		&movie.ID,
+		&movie.Title,
+		&movie.Description,
+		&movie.Genre,
+		&movie.Language,
+		&movie.DurationMinutes,
+		&movie.ReleaseDate,
+		&movie.Rating,
+		&posterURL,
+		&movie.IsActive,
+		&movie.CreatedAt,
+		&movie.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return domain.Movie{}, repository.ErrMovieNotFound
+		}
+		return domain.Movie{}, err
+	}
+
+	if posterURL.Valid {
+		movie.PosterURL = &posterURL.String
+	}
+
+	return movie, nil
+}
+
+func (r *MovieRepository) ListMovieShowtimeRecords(ctx context.Context, movieID string, showDate *time.Time) ([]domain.MovieShowtimeRecord, error) {
+	baseQuery := `
+	SELECT
+		m.id,
+		m.title,
+		m.duration_minutes,
+		t.id,
+		t.name,
+		t.city,
+		t.address_line1,
+		t.timezone,
+		s.id,
+		s.screen_name,
+		s.start_time,
+		s.language,
+		s.format,
+		s.base_price
+	FROM showtimes s
+	JOIN movies m ON m.id = s.movie_id
+	JOIN theaters t ON t.id = s.theater_id
+	WHERE m.id = $1
+	  AND m.is_active = TRUE
+	  AND t.is_active = TRUE
+	  AND s.is_active = TRUE
+	  AND s.start_time >= NOW()
+	`
+
+	args := []any{strings.TrimSpace(movieID)}
+	queryBuilder := strings.Builder{}
+	queryBuilder.WriteString(baseQuery)
+
+	if showDate != nil {
+		queryBuilder.WriteString(" AND s.start_time::date = $2::date")
+		args = append(args, showDate.Format("2006-01-02"))
+	}
+
+	queryBuilder.WriteString(" ORDER BY t.name ASC, s.start_time ASC")
+
+	rows, err := r.db.QueryContext(ctx, queryBuilder.String(), args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	records := make([]domain.MovieShowtimeRecord, 0)
+	for rows.Next() {
+		var record domain.MovieShowtimeRecord
+
+		if scanErr := rows.Scan(
+			&record.MovieID,
+			&record.MovieTitle,
+			&record.MovieDuration,
+			&record.TheaterID,
+			&record.TheaterName,
+			&record.City,
+			&record.AddressLine1,
+			&record.Timezone,
+			&record.ShowtimeID,
+			&record.ScreenName,
+			&record.StartTime,
+			&record.Language,
+			&record.Format,
+			&record.BasePrice,
+		); scanErr != nil {
+			return nil, scanErr
+		}
+
+		records = append(records, record)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return records, nil
 }
 
 var _ repository.MovieRepository = (*MovieRepository)(nil)
