@@ -36,9 +36,8 @@ export class SignupComponent {
     this.error = '';
     this.loading = true;
     this.auth.signup(this.form.getRawValue()).subscribe({
-      next: (res) => {
-        this.auth.setSession(res);
-        this.router.navigate(['/']);
+      next: () => {
+        this.router.navigate(['/login'], { queryParams: { signedUp: 'true' } });
       },
       error: (err) => {
         this.loading = false;

@@ -15,7 +15,7 @@ export class LoginComponent {
   form: FormGroup;
   error = '';
   loading = false;
-  /** Shown when user came from "See All" on the home page */
+  /** Shown when user came from "See All" or after signup */
   signInMessage = '';
 
   constructor(
@@ -29,9 +29,13 @@ export class LoginComponent {
       password: ['', Validators.required]
     });
     this.route.queryParams.subscribe((params) => {
-      this.signInMessage = params['from'] === 'see-all-movies'
-        ? 'Sign in to browse the full movie catalog.'
-        : '';
+      if (params['signedUp'] === 'true') {
+        this.signInMessage = 'Account created. Please sign in.';
+      } else if (params['from'] === 'see-all-movies') {
+        this.signInMessage = 'Sign in to browse the full movie catalog.';
+      } else {
+        this.signInMessage = '';
+      }
     });
   }
 

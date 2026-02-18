@@ -4,7 +4,7 @@
     <span class="logo-text">Box Office Go</span>
   </a>
   <nav class="auth-nav">
-    @if (auth.isLoggedIn()) {
+    @if (auth.isLoggedInSignal()) {
       <button type="button" class="btn btn-ghost" (click)="auth.logout()">Log out</button>
     } @else {
       <a routerLink="/login" class="btn btn-ghost">Sign in</a>
