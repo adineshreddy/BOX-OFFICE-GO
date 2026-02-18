@@ -31,6 +31,17 @@
     font-size: 0.9375rem;
   }
 
+  .sign-in-message {
+    margin: 0 0 1.5rem;
+    padding: 0.75rem 1rem;
+    background: rgba(139, 92, 246, 0.12);
+    border: 1px solid rgba(139, 92, 246, 0.25);
+    border-radius: 8px;
+    color: #c4b5fd;
+    font-size: 0.9375rem;
+    line-height: 1.4;
+  }
+
   .error {
     margin-bottom: 1rem;
     padding: 0.75rem 1rem;
