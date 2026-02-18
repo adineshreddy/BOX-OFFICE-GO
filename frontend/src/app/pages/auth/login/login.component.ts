@@ -1,5 +1,5 @@
 import { Component } from '@angular/core';
-import { Router, RouterLink } from '@angular/router';
+import { Router, RouterLink, ActivatedRoute } from '@angular/router';
 import { ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { AuthService } from '../../../services/auth.service';
 import { CommonModule } from '@angular/common';
@@ -15,15 +15,23 @@ export class LoginComponent {
   form: FormGroup;
   error = '';
   loading = false;
+  /** Shown when user came from "See All" on the home page */
+  signInMessage = '';
 
   constructor(
     private fb: FormBuilder,
     private auth: AuthService,
-    private router: Router
+    private router: Router,
+    private route: ActivatedRoute
   ) {
     this.form = this.fb.nonNullable.group({
       email: ['', [Validators.required, Validators.email]],
       password: ['', Validators.required]
+    });
+    this.route.queryParams.subscribe((params) => {
+      this.signInMessage = params['from'] === 'see-all-movies'
+        ? 'Sign in to browse the full movie catalog.'
+        : '';
     });
   }
 

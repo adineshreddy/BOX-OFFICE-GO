@@ -1,0 +1,153 @@
+<div class="home-container">
+  <!-- Hero Carousel Section -->
+  <section class="hero-section">
+    <div class="hero-carousel" (mouseenter)="pauseAutoRotate()" (mouseleave)="resumeAutoRotate()">
+      <button class="carousel-nav carousel-nav-left" (click)="prevHero()" aria-label="Previous">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M15 18l-6-6 6-6"/>
+        </svg>
+      </button>
+
+      <div class="hero-slides">
+        @for (banner of heroBanners; track $index) {
+          <div class="hero-slide" [class.active]="currentHeroIndex() === $index" [style.background]="banner.bgColor">
+            @if (banner.type === 'app-promo') {
+              <div class="promo-content app-promo">
+                <div class="promo-visual">
+                  <div class="app-visual-container">
+                    <svg class="phone-icon" viewBox="0 0 200 300" xmlns="http://www.w3.org/2000/svg">
+                      <!-- Phone body -->
+                      <rect x="30" y="20" width="140" height="260" rx="25" fill="#1a1a2e" stroke="#fff" stroke-width="3"/>
+                      <!-- Screen -->
+                      <rect x="40" y="50" width="120" height="200" rx="10" fill="#0f3460"/>
+                      <!-- App icons grid -->
+                      <circle cx="60" cy="80" r="8" fill="#667eea"/>
+                      <circle cx="85" cy="80" r="8" fill="#764ba2"/>
+                      <circle cx="110" cy="80" r="8" fill="#f093fb"/>
+                      <circle cx="135" cy="80" r="8" fill="#f5576c"/>
+                      <circle cx="60" cy="110" r="8" fill="#ffd89b"/>
+                      <circle cx="85" cy="110" r="8" fill="#19547b"/>
+                      <circle cx="110" cy="110" r="8" fill="#22c55e"/>
+                      <circle cx="135" cy="110" r="8" fill="#ff4444"/>
+                      <circle cx="60" cy="140" r="8" fill="#667eea"/>
+                      <circle cx="85" cy="140" r="8" fill="#764ba2"/>
+                      <circle cx="110" cy="140" r="8" fill="#f093fb"/>
+                      <circle cx="135" cy="140" r="8" fill="#f5576c"/>
+                      <!-- Home indicator -->
+                      <rect x="75" y="270" width="50" height="4" rx="2" fill="#fff" opacity="0.6"/>
+                    </svg>
+                  </div>
+                </div>
+                <div class="promo-text">
+                  <h2 class="promo-title">{{ banner.title }}</h2>
+                  <p class="promo-subtitle">{{ banner.subtitle }}</p>
+                  <p class="promo-description">{{ banner.description }}</p>
+                  <button class="promo-button" disabled>{{ banner.buttonText }}</button>
+                </div>
+              </div>
+            } @else if (banner.type === 'greeting-combined') {
+              <div class="promo-content greeting-promo">
+                <div class="greeting-visual">
+                  <div class="greeting-emoji">{{ banner.emoji }}</div>
+                  <div class="greeting-image">🎬</div>
+                </div>
+                <div class="greeting-text">
+                  <h2 class="greeting-title">{{ banner.title }}</h2>
+                  <p class="greeting-subtitle">{{ banner.subtitle }}</p>
+                  <p class="greeting-description">{{ banner.description }}</p>
+                  <button class="greeting-button">{{ banner.buttonText }}</button>
+                </div>
+              </div>
+            }
+          </div>
+        }
+      </div>
+
+      <button class="carousel-nav carousel-nav-right" (click)="nextHero()" aria-label="Next">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M9 18l6-6-6-6"/>
+        </svg>
+      </button>
+
+      <div class="carousel-dots">
+        @for (banner of heroBanners; track $index) {
+          <button
+            class="dot"
+            [class.active]="currentHeroIndex() === $index"
+            (click)="goToBanner($index)"
+            [attr.aria-label]="'Go to slide ' + ($index + 1)"
+          ></button>
+        }
+      </div>
+    </div>
+  </section>
+
+  <!-- Recommended Movies Section -->
+  <section class="recommended-section">
+    <div class="section-header">
+      <h2 class="section-title">Recommended Movies</h2>
+      <a (click)="goToSignIn()" class="see-all-link">See All &gt;</a>
+    </div>
+
+    <div class="movies-container">
+      <button 
+        class="scroll-btn scroll-btn-left" 
+        (click)="prevMovies()" 
+        [disabled]="!canGoPrev()"
+        [class.disabled]="!canGoPrev()"
+        aria-label="Previous movies">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M15 18l-6-6 6-6"/>
+        </svg>
+      </button>
+
+      <div class="movies-scroll-container">
+        @for (movie of visibleMovies(); track movie.id) {
+          <div class="movie-card" tabindex="0">
+            <div class="movie-poster">
+              <img class="movie-poster-img" [src]="movie.posterUrl" [alt]="movie.title + ' poster'" loading="lazy" />
+
+              <!-- Always show likes overlay (as in the screenshot) -->
+              <div class="movie-overlay">
+                <div class="overlay-likes">
+                  <span class="likes-icon">👍</span>
+                  <span class="likes-text">{{ movie.likesK }}K+ Likes</span>
+                </div>
+              </div>
+
+              <!-- Hover details -->
+              <div class="movie-hover-details">
+                <div class="details-row">
+                  <span class="details-pill">{{ movie.certificate }}</span>
+                  <span class="details-text">{{ movie.runtimeMinutes }} min</span>
+                </div>
+                <div class="details-row">
+                  <span class="details-text">⭐ {{ movie.rating }}/10</span>
+                </div>
+                <a class="trailer-link" [href]="movie.trailerUrl" target="_blank" rel="noopener noreferrer">
+                  Watch trailer
+                </a>
+              </div>
+            </div>
+            
+            <div class="movie-info">
+              <h3 class="movie-title">{{ movie.title }}</h3>
+              <p class="movie-genre">{{ movie.genre }}</p>
+            </div>
+          </div>
+        }
+      </div>
+
+      <button 
+        class="scroll-btn scroll-btn-right" 
+        (click)="nextMovies()" 
+        [disabled]="!canGoNext()"
+        [class.disabled]="!canGoNext()"
+        aria-label="Next movies">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M9 18l6-6-6-6"/>
+        </svg>
+      </button>
+    </div>
+  </section>
+</div>
