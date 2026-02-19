@@ -181,7 +181,7 @@ func (r *MovieRepository) ListMovieShowtimeRecords(ctx context.Context, movieID 
 	  AND m.is_active = TRUE
 	  AND t.is_active = TRUE
 	  AND s.is_active = TRUE
-	  AND s.start_time >= NOW()
+	  AND (s.start_time AT TIME ZONE 'America/New_York')::date >= (NOW() AT TIME ZONE 'America/New_York')::date
 	`
 
 	args := []any{strings.TrimSpace(movieID)}
@@ -189,7 +189,7 @@ func (r *MovieRepository) ListMovieShowtimeRecords(ctx context.Context, movieID 
 	queryBuilder.WriteString(baseQuery)
 
 	if showDate != nil {
-		queryBuilder.WriteString(" AND s.start_time::date = $2::date")
+		queryBuilder.WriteString(" AND (s.start_time AT TIME ZONE 'America/New_York')::date = $2::date")
 		args = append(args, showDate.Format("2006-01-02"))
 	}
 
