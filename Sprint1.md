@@ -1,5 +1,7 @@
 # Sprint 1 Report
 
+GitHub Link: https://github.com/adineshreddy/BOX-OFFICE-GO
+
 ## Sprint Overview
 Sprint 1 focused on building core foundations for the ticket booking platform with parallel frontend and backend tracks. The team prioritized authentication, movie catalog, and theater/showtime discovery while keeping FE-BE integration partial for this sprint.
 
