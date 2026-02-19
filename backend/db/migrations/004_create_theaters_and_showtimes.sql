@@ -3,7 +3,7 @@ CREATE TABLE IF NOT EXISTS theaters (
     name TEXT NOT NULL,
     city TEXT NOT NULL,
     address_line1 TEXT NOT NULL,
-    timezone TEXT NOT NULL DEFAULT 'Asia/Kolkata',
+    timezone TEXT NOT NULL DEFAULT 'America/New_York',
     total_screens INTEGER NOT NULL DEFAULT 1 CHECK (total_screens > 0),
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -50,10 +50,10 @@ VALUES
     ),
     (
         'th_002',
-        'Regal Lakeside',
-        'Chicago',
-        '455 N Cityfront Plaza Dr',
-        'America/Chicago',
+        'Regal Back Bay',
+        'Boston',
+        '401 Park Dr',
+        'America/New_York',
         5,
         TRUE,
         NOW(),
@@ -61,10 +61,10 @@ VALUES
     ),
     (
         'th_003',
-        'Cinemark Harbor Point',
-        'Seattle',
-        '600 Pine St, Downtown',
-        'America/Los_Angeles',
+        'Cinemark Buckhead',
+        'Atlanta',
+        '3393 Peachtree Rd NE',
+        'America/New_York',
         3,
         TRUE,
         NOW(),
@@ -72,10 +72,10 @@ VALUES
     ),
     (
         'th_004',
-        'Alamo Riverwalk',
-        'San Antonio',
-        '849 E Commerce St',
-        'America/Chicago',
+        'Alamo South Beach',
+        'Miami',
+        '1212 Lincoln Rd',
+        'America/New_York',
         4,
         TRUE,
         NOW(),
@@ -83,9 +83,9 @@ VALUES
     ),
     (
         'th_005',
-        'Landmark Atlantic Station',
-        'Atlanta',
-        '261 19th St NW',
+        'Landmark Capitol View',
+        'Washington',
+        '700 Pennsylvania Ave NW',
         'America/New_York',
         3,
         TRUE,
@@ -102,6 +102,41 @@ SET
     is_active = EXCLUDED.is_active,
     updated_at = NOW();
 
+WITH bounds AS (
+    SELECT
+        date_trunc('day', NOW() AT TIME ZONE 'America/New_York') AS start_date,
+        date_trunc('day', (NOW() AT TIME ZONE 'America/New_York') + INTERVAL '6 months') AS end_date
+),
+days AS (
+    SELECT gs::timestamp AS show_day
+    FROM bounds b,
+    generate_series(b.start_date, b.end_date, INTERVAL '1 day') gs
+),
+templates AS (
+    SELECT *
+    FROM (
+        VALUES
+            ('mov_001', 'th_001', 'Screen 1', '11 hours'::interval, 'English', '2D', 220.00::numeric),
+            ('mov_001', 'th_002', 'Screen 2', '18 hours'::interval, 'English', 'IMAX', 420.00::numeric),
+            ('mov_002', 'th_001', 'Screen 2', '10 hours 30 minutes'::interval, 'Hindi', '2D', 180.00::numeric),
+            ('mov_002', 'th_004', 'Screen 3', '17 hours 30 minutes'::interval, 'Hindi', '2D', 210.00::numeric),
+            ('mov_003', 'th_003', 'Screen B', '12 hours 15 minutes'::interval, 'Telugu', '2D', 220.00::numeric),
+            ('mov_003', 'th_005', 'Screen 2', '19 hours 15 minutes'::interval, 'Telugu', '2D', 210.00::numeric)
+    ) AS t(movie_id, theater_id, screen_name, time_of_day, language, format, base_price)
+),
+generated AS (
+    SELECT
+        'st_' || substr(md5(t.movie_id || '|' || t.theater_id || '|' || t.screen_name || '|' || to_char(d.show_day, 'YYYYMMDD') || '|' || t.time_of_day::text), 1, 20) AS id,
+        t.movie_id,
+        t.theater_id,
+        t.screen_name,
+        (d.show_day + t.time_of_day) AT TIME ZONE 'America/New_York' AS start_time,
+        t.language,
+        t.format,
+        t.base_price
+    FROM days d
+    CROSS JOIN templates t
+)
 INSERT INTO showtimes (
     id,
     movie_id,
@@ -115,21 +150,24 @@ INSERT INTO showtimes (
     created_at,
     updated_at
 )
-VALUES
-    ('st_001', 'mov_001', 'th_001', 'Screen 1', NOW() + INTERVAL '2 hours', 'English', '2D', 220.00, TRUE, NOW(), NOW()),
-    ('st_002', 'mov_001', 'th_001', 'Screen 1', NOW() + INTERVAL '5 hours', 'English', '2D', 220.00, TRUE, NOW(), NOW()),
-    ('st_003', 'mov_001', 'th_002', 'Screen 2', NOW() + INTERVAL '3 hours', 'English', 'IMAX', 420.00, TRUE, NOW(), NOW()),
-    ('st_004', 'mov_001', 'th_002', 'Screen 2', NOW() + INTERVAL '6 hours 30 minutes', 'English', 'IMAX', 420.00, TRUE, NOW(), NOW()),
-    ('st_005', 'mov_001', 'th_003', 'Screen A', NOW() + INTERVAL '4 hours', 'English', '2D', 250.00, TRUE, NOW(), NOW()),
-    ('st_006', 'mov_001', 'th_003', 'Screen A', NOW() + INTERVAL '7 hours', 'English', '2D', 250.00, TRUE, NOW(), NOW()),
-    ('st_007', 'mov_002', 'th_001', 'Screen 2', NOW() + INTERVAL '2 hours 30 minutes', 'Hindi', '2D', 180.00, TRUE, NOW(), NOW()),
-    ('st_008', 'mov_002', 'th_001', 'Screen 2', NOW() + INTERVAL '5 hours', 'Hindi', '2D', 180.00, TRUE, NOW(), NOW()),
-    ('st_009', 'mov_002', 'th_004', 'Screen 3', NOW() + INTERVAL '3 hours', 'Hindi', '2D', 210.00, TRUE, NOW(), NOW()),
-    ('st_010', 'mov_002', 'th_004', 'Screen 3', NOW() + INTERVAL '6 hours', 'Hindi', '2D', 210.00, TRUE, NOW(), NOW()),
-    ('st_011', 'mov_002', 'th_005', 'Screen 1', NOW() + INTERVAL '4 hours', 'Hindi', '2D', 190.00, TRUE, NOW(), NOW()),
-    ('st_012', 'mov_003', 'th_002', 'Screen 4', NOW() + INTERVAL '3 hours 15 minutes', 'Telugu', '2D', 200.00, TRUE, NOW(), NOW()),
-    ('st_013', 'mov_003', 'th_002', 'Screen 4', NOW() + INTERVAL '6 hours 30 minutes', 'Telugu', '2D', 200.00, TRUE, NOW(), NOW()),
-    ('st_014', 'mov_003', 'th_003', 'Screen B', NOW() + INTERVAL '4 hours 30 minutes', 'Telugu', '2D', 220.00, TRUE, NOW(), NOW()),
-    ('st_015', 'mov_003', 'th_003', 'Screen B', NOW() + INTERVAL '8 hours', 'Telugu', '2D', 220.00, TRUE, NOW(), NOW()),
-    ('st_016', 'mov_003', 'th_005', 'Screen 2', NOW() + INTERVAL '5 hours', 'Telugu', '2D', 210.00, TRUE, NOW(), NOW())
-ON CONFLICT (id) DO NOTHING;
+SELECT
+    g.id,
+    g.movie_id,
+    g.theater_id,
+    g.screen_name,
+    g.start_time,
+    g.language,
+    g.format,
+    g.base_price,
+    TRUE,
+    NOW(),
+    NOW()
+FROM generated g
+ON CONFLICT (theater_id, screen_name, start_time) DO UPDATE
+SET
+    movie_id = EXCLUDED.movie_id,
+    language = EXCLUDED.language,
+    format = EXCLUDED.format,
+    base_price = EXCLUDED.base_price,
+    is_active = EXCLUDED.is_active,
+    updated_at = NOW();
