@@ -101,6 +101,22 @@ func ensureSchema(ctx context.Context, db *sql.DB) error {
 	);
 	`
 
+	createSeatInventoryTableQuery := `
+	CREATE TABLE IF NOT EXISTS seat_inventory (
+		showtime_id TEXT NOT NULL REFERENCES showtimes(id) ON DELETE CASCADE,
+		seat_number TEXT NOT NULL,
+		row_label TEXT NOT NULL,
+		seat_index INTEGER NOT NULL CHECK (seat_index > 0),
+		seat_type TEXT NOT NULL DEFAULT 'regular',
+		price_multiplier NUMERIC(6,2) NOT NULL DEFAULT 1.00 CHECK (price_multiplier > 0),
+		is_available BOOLEAN NOT NULL DEFAULT TRUE,
+		is_held BOOLEAN NOT NULL DEFAULT FALSE,
+		created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		PRIMARY KEY (showtime_id, seat_number)
+	);
+	`
+
 	if _, err := db.ExecContext(ctx, createUsersTableQuery); err != nil {
 		return err
 	}
@@ -114,6 +130,10 @@ func ensureSchema(ctx context.Context, db *sql.DB) error {
 	}
 
 	if _, err := db.ExecContext(ctx, createShowtimesTableQuery); err != nil {
+		return err
+	}
+
+	if _, err := db.ExecContext(ctx, createSeatInventoryTableQuery); err != nil {
 		return err
 	}
 
@@ -297,12 +317,12 @@ func ensureSchema(ctx context.Context, db *sql.DB) error {
 		SELECT *
 		FROM (
 			VALUES
-				('mov_001', 'th_001', 'Screen 1', '11 hours'::interval, 'English', '2D', 220.00::numeric),
-				('mov_001', 'th_002', 'Screen 2', '18 hours'::interval, 'English', 'IMAX', 420.00::numeric),
-				('mov_002', 'th_001', 'Screen 2', '10 hours 30 minutes'::interval, 'Hindi', '2D', 180.00::numeric),
-				('mov_002', 'th_004', 'Screen 3', '17 hours 30 minutes'::interval, 'Hindi', '2D', 210.00::numeric),
-				('mov_003', 'th_003', 'Screen B', '12 hours 15 minutes'::interval, 'Telugu', '2D', 220.00::numeric),
-				('mov_003', 'th_005', 'Screen 2', '19 hours 15 minutes'::interval, 'Telugu', '2D', 210.00::numeric)
+				('mov_001', 'th_001', 'Screen 1', '11 hours'::interval, 'English', '2D', 12.00::numeric),
+				('mov_001', 'th_002', 'Screen 2', '18 hours'::interval, 'English', 'IMAX', 12.00::numeric),
+				('mov_002', 'th_001', 'Screen 2', '10 hours 30 minutes'::interval, 'Hindi', '2D', 12.00::numeric),
+				('mov_002', 'th_004', 'Screen 3', '17 hours 30 minutes'::interval, 'Hindi', '2D', 12.00::numeric),
+				('mov_003', 'th_003', 'Screen B', '12 hours 15 minutes'::interval, 'Telugu', '2D', 12.00::numeric),
+				('mov_003', 'th_005', 'Screen 2', '19 hours 15 minutes'::interval, 'Telugu', '2D', 12.00::numeric)
 		) AS t(movie_id, theater_id, screen_name, time_of_day, language, format, base_price)
 	),
 	generated AS (
@@ -355,6 +375,87 @@ func ensureSchema(ctx context.Context, db *sql.DB) error {
 	`
 
 	if _, err := db.ExecContext(ctx, seedShowtimesQuery); err != nil {
+		return err
+	}
+
+	forceBasePriceQuery := `
+	UPDATE showtimes
+	SET base_price = 12.00,
+		updated_at = NOW();
+	`
+
+	if _, err := db.ExecContext(ctx, forceBasePriceQuery); err != nil {
+		return err
+	}
+
+	seedSeatInventoryQuery := `
+	WITH row_labels AS (
+		SELECT unnest(ARRAY['A','B','C','D','E','F','G','H','I','J']) AS row_label
+	),
+	seat_numbers AS (
+		SELECT generate_series(1, 12) AS seat_index
+	),
+	base_layout AS (
+		SELECT
+			rl.row_label,
+			sn.seat_index,
+			rl.row_label || LPAD(sn.seat_index::text, 2, '0') AS seat_number,
+			CASE
+				WHEN rl.row_label IN ('A', 'B') THEN 'premium'
+				WHEN rl.row_label IN ('C', 'D', 'E', 'F', 'G', 'H') THEN 'regular'
+				ELSE 'recliner'
+			END AS seat_type,
+			CASE
+				WHEN rl.row_label IN ('A', 'B') THEN 1.40
+				WHEN rl.row_label IN ('C', 'D', 'E', 'F', 'G', 'H') THEN 1.00
+				ELSE 1.25
+			END AS price_multiplier
+		FROM row_labels rl
+		CROSS JOIN seat_numbers sn
+	),
+	all_rows AS (
+		SELECT
+			s.id AS showtime_id,
+			b.seat_number,
+			b.row_label,
+			b.seat_index,
+			b.seat_type,
+			b.price_multiplier,
+			TRUE AS is_available,
+			FALSE AS is_held,
+			NOW() AS created_at,
+			NOW() AS updated_at
+		FROM showtimes s
+		CROSS JOIN base_layout b
+	)
+	INSERT INTO seat_inventory (
+		showtime_id,
+		seat_number,
+		row_label,
+		seat_index,
+		seat_type,
+		price_multiplier,
+		is_available,
+		is_held,
+		created_at,
+		updated_at
+	)
+	SELECT
+		showtime_id,
+		seat_number,
+		row_label,
+		seat_index,
+		seat_type,
+		price_multiplier,
+		is_available,
+		is_held,
+		created_at,
+		updated_at
+	FROM all_rows
+	ON CONFLICT (showtime_id, seat_number) DO NOTHING;
+	`
+
+	if _, err := db.ExecContext(ctx, seedSeatInventoryQuery); err != nil {
 		return err
 	}
 

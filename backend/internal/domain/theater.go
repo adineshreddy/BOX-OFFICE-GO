@@ -56,3 +56,60 @@ type MovieTheaterListResponse struct {
 	DurationMinutes int               `json:"durationMinutes"`
 	Theaters        []TheaterSchedule `json:"theaters"`
 }
+
+type ShowDetails struct {
+	ShowtimeID       string    `json:"showtimeId"`
+	MovieID          string    `json:"movieId"`
+	MovieTitle       string    `json:"movieTitle"`
+	TheaterID        string    `json:"theaterId"`
+	TheaterName      string    `json:"theaterName"`
+	City             string    `json:"city"`
+	AddressLine1     string    `json:"addressLine1"`
+	ScreenName       string    `json:"screenName"`
+	StartTime        time.Time `json:"startTime"`
+	Language         string    `json:"language"`
+	Format           string    `json:"format"`
+	BasePrice        float64   `json:"basePrice"`
+	DurationMinutes  int       `json:"durationMinutes"`
+	AvailableSeats   int       `json:"availableSeats"`
+	TotalSeats       int       `json:"totalSeats"`
+	UnavailableSeats int       `json:"unavailableSeats"`
+}
+
+type SeatItem struct {
+	SeatNumber  string  `json:"seatNumber"`
+	RowLabel    string  `json:"rowLabel"`
+	SeatIndex   int     `json:"seatIndex"`
+	SeatType    string  `json:"seatType"`
+	PriceFactor float64 `json:"priceFactor"`
+	IsAvailable bool    `json:"isAvailable"`
+	IsHeld      bool    `json:"isHeld"`
+}
+
+type SeatRow struct {
+	RowLabel string     `json:"rowLabel"`
+	Seats    []SeatItem `json:"seats"`
+}
+
+type SeatMapResponse struct {
+	ShowtimeID       string    `json:"showtimeId"`
+	MovieTitle       string    `json:"movieTitle"`
+	TheaterName      string    `json:"theaterName"`
+	ScreenName       string    `json:"screenName"`
+	ShowTime         time.Time `json:"showTime"`
+	TotalSeats       int       `json:"totalSeats"`
+	AvailableSeats   int       `json:"availableSeats"`
+	UnavailableSeats int       `json:"unavailableSeats"`
+	Rows             []SeatRow `json:"rows"`
+}
+
+type SeatAvailabilityResponse struct {
+	ShowtimeID       string    `json:"showtimeId"`
+	MovieTitle       string    `json:"movieTitle"`
+	TheaterName      string    `json:"theaterName"`
+	ShowTime         time.Time `json:"showTime"`
+	TotalSeats       int       `json:"totalSeats"`
+	AvailableSeats   int       `json:"availableSeats"`
+	UnavailableSeats int       `json:"unavailableSeats"`
+	LastRefreshedAt  time.Time `json:"lastRefreshedAt"`
+}
