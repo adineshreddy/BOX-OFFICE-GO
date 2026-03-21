@@ -116,12 +116,12 @@ templates AS (
     SELECT *
     FROM (
         VALUES
-            ('mov_001', 'th_001', 'Screen 1', '11 hours'::interval, 'English', '2D', 220.00::numeric),
-            ('mov_001', 'th_002', 'Screen 2', '18 hours'::interval, 'English', 'IMAX', 420.00::numeric),
-            ('mov_002', 'th_001', 'Screen 2', '10 hours 30 minutes'::interval, 'Hindi', '2D', 180.00::numeric),
-            ('mov_002', 'th_004', 'Screen 3', '17 hours 30 minutes'::interval, 'Hindi', '2D', 210.00::numeric),
-            ('mov_003', 'th_003', 'Screen B', '12 hours 15 minutes'::interval, 'Telugu', '2D', 220.00::numeric),
-            ('mov_003', 'th_005', 'Screen 2', '19 hours 15 minutes'::interval, 'Telugu', '2D', 210.00::numeric)
+            ('mov_001', 'th_001', 'Screen 1', '11 hours'::interval, 'English', '2D', 12.00::numeric),
+            ('mov_001', 'th_002', 'Screen 2', '18 hours'::interval, 'English', 'IMAX', 12.00::numeric),
+            ('mov_002', 'th_001', 'Screen 2', '10 hours 30 minutes'::interval, 'Hindi', '2D', 12.00::numeric),
+            ('mov_002', 'th_004', 'Screen 3', '17 hours 30 minutes'::interval, 'Hindi', '2D', 12.00::numeric),
+            ('mov_003', 'th_003', 'Screen B', '12 hours 15 minutes'::interval, 'Telugu', '2D', 12.00::numeric),
+            ('mov_003', 'th_005', 'Screen 2', '19 hours 15 minutes'::interval, 'Telugu', '2D', 12.00::numeric)
     ) AS t(movie_id, theater_id, screen_name, time_of_day, language, format, base_price)
 ),
 generated AS (
@@ -170,4 +170,8 @@ SET
     format = EXCLUDED.format,
     base_price = EXCLUDED.base_price,
     is_active = EXCLUDED.is_active,
+    updated_at = NOW();
+
+UPDATE showtimes
+SET base_price = 12.00,
     updated_at = NOW();

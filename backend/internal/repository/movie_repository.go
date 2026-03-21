@@ -10,8 +10,13 @@ import (
 
 var ErrMovieNotFound = errors.New("movie not found")
 
+var ErrShowtimeNotFound = errors.New("showtime not found")
+
 type MovieRepository interface {
 	ListActive(ctx context.Context, titleQuery string, genreQuery string) ([]domain.Movie, error)
 	GetByID(ctx context.Context, movieID string) (domain.Movie, error)
 	ListMovieShowtimeRecords(ctx context.Context, movieID string, showDate *time.Time) ([]domain.MovieShowtimeRecord, error)
+	GetShowDetailsBySelection(ctx context.Context, movieID string, theaterID string, showTime time.Time) (domain.ShowDetails, error)
+	GetSeatMapBySelection(ctx context.Context, movieID string, theaterID string, showTime time.Time) (domain.SeatMapResponse, error)
+	GetSeatAvailabilityBySelection(ctx context.Context, movieID string, theaterID string, showTime time.Time) (domain.SeatAvailabilityResponse, error)
 }

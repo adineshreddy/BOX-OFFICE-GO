@@ -23,6 +23,33 @@ func (s *MovieService) ListMovies(ctx context.Context, titleQuery string, genreQ
 	return s.movieRepository.ListActive(ctx, titleQuery, genreQuery)
 }
 
+func (s *MovieService) GetShowDetailsBySelection(ctx context.Context, movieID string, theaterID string, showTime string) (domain.ShowDetails, error) {
+	parsedShowTime, err := parseSelectionInputs(movieID, theaterID, showTime)
+	if err != nil {
+		return domain.ShowDetails{}, err
+	}
+
+	return s.movieRepository.GetShowDetailsBySelection(ctx, movieID, theaterID, parsedShowTime)
+}
+
+func (s *MovieService) GetSeatMapBySelection(ctx context.Context, movieID string, theaterID string, showTime string) (domain.SeatMapResponse, error) {
+	parsedShowTime, err := parseSelectionInputs(movieID, theaterID, showTime)
+	if err != nil {
+		return domain.SeatMapResponse{}, err
+	}
+
+	return s.movieRepository.GetSeatMapBySelection(ctx, movieID, theaterID, parsedShowTime)
+}
+
+func (s *MovieService) GetSeatAvailabilityBySelection(ctx context.Context, movieID string, theaterID string, showTime string) (domain.SeatAvailabilityResponse, error) {
+	parsedShowTime, err := parseSelectionInputs(movieID, theaterID, showTime)
+	if err != nil {
+		return domain.SeatAvailabilityResponse{}, err
+	}
+
+	return s.movieRepository.GetSeatAvailabilityBySelection(ctx, movieID, theaterID, parsedShowTime)
+}
+
 func (s *MovieService) ListTheatersByMovie(ctx context.Context, movieID string, showDate string) (domain.MovieTheaterListResponse, error) {
 	trimmedMovieID := strings.TrimSpace(movieID)
 	if trimmedMovieID == "" {
@@ -109,4 +136,26 @@ func (s *MovieService) ListTheatersByMovie(ctx context.Context, movieID string, 
 	}
 
 	return response, nil
+}
+
+func parseSelectionInputs(movieID string, theaterID string, showTime string) (time.Time, error) {
+	if strings.TrimSpace(movieID) == "" {
+		return time.Time{}, fmt.Errorf("movieId query parameter is required")
+	}
+
+	if strings.TrimSpace(theaterID) == "" {
+		return time.Time{}, fmt.Errorf("theaterId query parameter is required")
+	}
+
+	trimmedShowTime := strings.TrimSpace(showTime)
+	if trimmedShowTime == "" {
+		return time.Time{}, fmt.Errorf("showTime query parameter is required")
+	}
+
+	parsedShowTime, err := time.Parse(time.RFC3339, trimmedShowTime)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("showTime must be in RFC3339 format, e.g. 2026-03-25T15:00:00Z")
+	}
+
+	return parsedShowTime.UTC(), nil
 }
