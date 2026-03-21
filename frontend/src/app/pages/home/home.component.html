@@ -102,39 +102,48 @@
       </button>
 
       <div class="movies-scroll-container">
-        @for (movie of visibleMovies(); track movie.id) {
-          <div class="movie-card" tabindex="0">
-            <div class="movie-poster">
-              <img class="movie-poster-img" [src]="movie.posterUrl" [alt]="movie.title + ' poster'" loading="lazy" />
+        @if (loadingMovies()) {
+          <p class="movies-status">Loading movies…</p>
+        } @else if (moviesError()) {
+          <p class="movies-status error" role="alert">{{ moviesError() }}</p>
+        } @else if (movies().length === 0) {
+          <p class="movies-status">No movies available yet.</p>
+        } @else {
+          @for (movie of visibleMovies(); track movie.id) {
+            <a class="movie-card" [routerLink]="['/movies', movie.id]">
+              <div class="movie-poster">
+                <img
+                  class="movie-poster-img"
+                  [src]="posterUrl(movie)"
+                  [alt]="movie.title + ' poster'"
+                  loading="lazy"
+                  (error)="onPosterError($event)"
+                />
 
-              <!-- Always show likes overlay (as in the screenshot) -->
-              <div class="movie-overlay">
-                <div class="overlay-likes">
-                  <span class="likes-icon">👍</span>
-                  <span class="likes-text">{{ movie.likesK }}K+ Likes</span>
+                <div class="movie-overlay">
+                  <div class="overlay-likes">
+                    <span class="likes-text">{{ movie.language }}</span>
+                  </div>
+                </div>
+
+                <div class="movie-hover-details">
+                  <div class="details-row">
+                    <span class="details-pill">{{ movie.genre }}</span>
+                    <span class="details-text">{{ movie.durationMinutes }} min</span>
+                  </div>
+                  <div class="details-row">
+                    <span class="details-text">⭐ {{ movie.rating | number: '1.1-1' }}/10</span>
+                  </div>
+                  <span class="trailer-link muted-link">View details &amp; showtimes</span>
                 </div>
               </div>
 
-              <!-- Hover details -->
-              <div class="movie-hover-details">
-                <div class="details-row">
-                  <span class="details-pill">{{ movie.certificate }}</span>
-                  <span class="details-text">{{ movie.runtimeMinutes }} min</span>
-                </div>
-                <div class="details-row">
-                  <span class="details-text">⭐ {{ movie.rating }}/10</span>
-                </div>
-                <a class="trailer-link" [href]="movie.trailerUrl" target="_blank" rel="noopener noreferrer">
-                  Watch trailer
-                </a>
+              <div class="movie-info">
+                <h3 class="movie-title">{{ movie.title }}</h3>
+                <p class="movie-genre">{{ movie.genre }}</p>
               </div>
-            </div>
-            
-            <div class="movie-info">
-              <h3 class="movie-title">{{ movie.title }}</h3>
-              <p class="movie-genre">{{ movie.genre }}</p>
-            </div>
-          </div>
+            </a>
+          }
         }
       </div>
 

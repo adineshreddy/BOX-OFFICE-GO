@@ -1,8 +1,25 @@
 import { Component } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
-import { ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
-import { AuthService } from '../../../services/auth.service';
+import {
+  AbstractControl,
+  ReactiveFormsModule,
+  FormBuilder,
+  FormGroup,
+  ValidationErrors,
+  Validators
+} from '@angular/forms';
+import { AuthService, formatAuthHttpError } from '../../../services/auth.service';
 import { CommonModule } from '@angular/common';
+
+function passwordsMatchValidator(group: AbstractControl): ValidationErrors | null {
+  const fg = group as FormGroup;
+  const p = fg.get('password')?.value as string | undefined;
+  const c = fg.get('confirmPassword')?.value as string | undefined;
+  if (!p || !c) {
+    return null;
+  }
+  return p === c ? null : { passwordMismatch: true };
+}
 
 @Component({
   selector: 'app-signup',
@@ -21,11 +38,16 @@ export class SignupComponent {
     private auth: AuthService,
     private router: Router
   ) {
-    this.form = this.fb.nonNullable.group({
-      email: ['', [Validators.required, Validators.email]],
-      password: ['', [Validators.required, Validators.minLength(6)]],
-      name: ['', [Validators.required, Validators.minLength(2)]]
-    });
+    this.form = this.fb.nonNullable.group(
+      {
+        name: ['', [Validators.required, Validators.minLength(2)]],
+        phone: ['', [Validators.required, Validators.pattern(/^[0-9+]{8,15}$/)]],
+        email: ['', [Validators.required, Validators.email]],
+        password: ['', [Validators.required, Validators.minLength(8)]],
+        confirmPassword: ['', Validators.required]
+      },
+      { validators: [passwordsMatchValidator] }
+    );
   }
 
   onSubmit() {
@@ -35,14 +57,24 @@ export class SignupComponent {
     }
     this.error = '';
     this.loading = true;
-    this.auth.signup(this.form.getRawValue()).subscribe({
-      next: () => {
-        this.router.navigate(['/login'], { queryParams: { signedUp: 'true' } });
-      },
-      error: (err) => {
-        this.loading = false;
-        this.error = err.error?.message || err.message || 'Sign up failed';
-      }
-    });
+    const v = this.form.getRawValue();
+    this.auth
+      .signup({
+        name: v.name,
+        phone: v.phone,
+        email: v.email,
+        password: v.password,
+        confirmPassword: v.confirmPassword
+      })
+      .subscribe({
+        next: () => {
+          this.loading = false;
+          void this.router.navigate(['/login'], { queryParams: { signedUp: 'true' } });
+        },
+        error: err => {
+          this.loading = false;
+          this.error = formatAuthHttpError(err);
+        }
+      });
   }
 }

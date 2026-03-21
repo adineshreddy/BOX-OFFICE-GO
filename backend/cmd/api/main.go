@@ -7,6 +7,7 @@ import (
 
 	"box-office-go/backend/internal/config"
 	"box-office-go/backend/internal/database"
+	"box-office-go/backend/internal/http/middleware"
 	httpRouter "box-office-go/backend/internal/http/router"
 	"box-office-go/backend/internal/repository/postgres"
 	"box-office-go/backend/internal/service"
@@ -31,11 +32,11 @@ func main() {
 	authService := service.NewAuthService(userRepository)
 	movieService := service.NewMovieService(movieRepository)
 
-	router := httpRouter.New(authService, movieService)
+	api := httpRouter.New(authService, movieService)
 
 	server := &http.Server{
 		Addr:    ":" + cfg.Port,
-		Handler: router,
+		Handler: middleware.CORS(api),
 	}
 
 	log.Printf("backend server listening on port %s", cfg.Port)

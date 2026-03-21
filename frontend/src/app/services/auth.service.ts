@@ -1,87 +1,71 @@
 import { Injectable, signal, computed } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
-import { Observable, of, throwError } from 'rxjs';
-import { delay } from 'rxjs/operators';
+import { HttpClient, HttpErrorResponse } from '@angular/common/http';
+import { Observable } from 'rxjs';
 import { environment } from '../../environments/environment';
 import { Router } from '@angular/router';
+import {
+  AuthUser,
+  LoginRequest,
+  LoginResponse,
+  SignupRequest,
+  SignupResponse
+} from '../models/auth.models';
 
-/** Mock user store for signup (in-memory). */
-const MOCK_USERS: Array<{ email: string; password: string; name: string }> = [
-  { email: 'demo@example.com', password: 'demo123', name: 'Demo User' }
-];
+const USER_STORAGE_KEY = 'auth_user';
 
-function mockLogin(data: { email: string; password: string }): Observable<any> {
-  const user = MOCK_USERS.find(
-    (u) => u.email === data.email && u.password === data.password
-  );
-  if (!user) {
-    return throwError(() => ({
-      error: { message: 'Invalid email or password' },
-      message: 'Invalid email or password'
-    })).pipe(delay(400));
+export function formatAuthHttpError(err: unknown): string {
+  if (err instanceof HttpErrorResponse && err.error && typeof err.error === 'object') {
+    const e = err.error as { message?: string; fields?: Record<string, string> };
+    const fieldText = e.fields ? Object.values(e.fields).join(' ') : '';
+    if (e.message || fieldText) {
+      return [e.message, fieldText].filter(Boolean).join(' ');
+    }
   }
-  return of({
-    token: 'mock-jwt-' + btoa(data.email).slice(0, 20),
-    role: 'USER'
-  }).pipe(delay(400));
-}
-
-function mockSignup(data: {
-  email: string;
-  password: string;
-  name: string;
-}): Observable<any> {
-  if (MOCK_USERS.some((u) => u.email === data.email)) {
-    return throwError(() => ({
-      error: { message: 'Email already registered' },
-      message: 'Email already registered'
-    })).pipe(delay(400));
+  if (err instanceof Error) {
+    return err.message;
   }
-  MOCK_USERS.push({
-    email: data.email,
-    password: data.password,
-    name: data.name
-  });
-  return of({
-    token: 'mock-jwt-' + btoa(data.email).slice(0, 20),
-    role: 'USER'
-  }).pipe(delay(400));
+  return 'Something went wrong';
 }
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {
-  private token = signal<string | null>(localStorage.getItem('token'));
-  private role = signal<string | null>(localStorage.getItem('role'));
-  /** Use in templates so the header updates when login/signup/logout changes. */
-  readonly isLoggedInSignal = computed(() => !!this.token());
+  private user = signal<AuthUser | null>(this.readStoredUser());
+
+  readonly isLoggedInSignal = computed(() => !!this.user());
 
   constructor(private http: HttpClient, private router: Router) {}
 
-  login(data: any): Observable<any> {
-    if (environment.useMockAuth) {
-      return mockLogin(data);
+  private readStoredUser(): AuthUser | null {
+    try {
+      const raw = localStorage.getItem(USER_STORAGE_KEY);
+      if (!raw) {
+        return null;
+      }
+      return JSON.parse(raw) as AuthUser;
+    } catch {
+      return null;
     }
-    return this.http.post<any>(`${environment.apiUrl}/auth/login`, data);
   }
 
-  signup(data: any): Observable<any> {
-    if (environment.useMockAuth) {
-      return mockSignup(data);
-    }
-    return this.http.post<any>(`${environment.apiUrl}/auth/signup`, data);
+  login(data: LoginRequest): Observable<LoginResponse> {
+    return this.http.post<LoginResponse>(`${environment.apiUrl}/auth/login`, data);
   }
 
-  setSession(res: any) {
-    localStorage.setItem('token', res.token);
-    localStorage.setItem('role', res.role);
-    this.token.set(res.token);
-    this.role.set(res.role);
+  signup(data: SignupRequest): Observable<SignupResponse> {
+    return this.http.post<SignupResponse>(`${environment.apiUrl}/auth/signup`, data);
+  }
+
+  /** Persists session from API responses (backend does not issue JWT). */
+  setSessionFromLogin(res: LoginResponse) {
+    localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(res.user));
+    this.user.set(res.user);
   }
 
   logout() {
-    localStorage.clear();
-    this.token.set(null);
-    this.role.set(null);
+    localStorage.removeItem(USER_STORAGE_KEY);
+    localStorage.removeItem('token');
+    localStorage.removeItem('role');
+    this.user.set(null);
     this.router.navigate(['/login']);
   }
 
@@ -89,11 +73,16 @@ export class AuthService {
     return this.isLoggedInSignal();
   }
 
-  isAdmin() {
-    return this.role() === 'ADMIN';
+  getUser(): AuthUser | null {
+    return this.user();
   }
 
-  getToken() {
-    return this.token();
+  /** No JWT from API; interceptor skips Authorization when null. */
+  getToken(): string | null {
+    return null;
+  }
+
+  isAdmin(): boolean {
+    return this.user()?.isAdmin === true;
   }
 }

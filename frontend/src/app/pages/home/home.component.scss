@@ -446,6 +446,16 @@
   }
 }
 
+.movies-status {
+  padding: 2rem 1rem;
+  color: #555;
+  flex: 1 1 100%;
+  text-align: center;
+  &.error {
+    color: #b91c1c;
+  }
+}
+
 // Movie Card
 .movie-card {
   flex: 0 0 calc((100% - 6rem) / 5); // 5 cards with 4 gaps of 1.5rem = 6rem total
@@ -458,6 +468,9 @@
   transition: transform 0.18s ease, box-shadow 0.18s ease;
   cursor: pointer;
   position: relative;
+  text-decoration: none;
+  color: inherit;
+  display: block;
   
   &:hover {
     transform: translateY(-6px) scale(1.03);

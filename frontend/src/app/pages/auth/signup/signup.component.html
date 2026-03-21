@@ -15,6 +15,13 @@
       }
     </label>
     <label>
+      <span>Phone</span>
+      <input type="tel" formControlName="phone" placeholder="+919876543210" autocomplete="tel" />
+      @if (form.get('phone')?.invalid && form.get('phone')?.touched) {
+        <span class="field-error">8–15 digits, optional leading +</span>
+      }
+    </label>
+    <label>
       <span>Email</span>
       <input type="email" formControlName="email" placeholder="you@example.com" autocomplete="email" />
       @if (form.get('email')?.invalid && form.get('email')?.touched) {
@@ -25,9 +32,19 @@
       <span>Password</span>
       <input type="password" formControlName="password" placeholder="••••••••" autocomplete="new-password" />
       @if (form.get('password')?.invalid && form.get('password')?.touched) {
-        <span class="field-error">Password must be at least 6 characters</span>
+        <span class="field-error">Password must be at least 8 characters</span>
       }
     </label>
+    <label>
+      <span>Confirm password</span>
+      <input type="password" formControlName="confirmPassword" placeholder="••••••••" autocomplete="new-password" />
+      @if (form.get('confirmPassword')?.invalid && form.get('confirmPassword')?.touched) {
+        <span class="field-error">Required</span>
+      }
+    </label>
+    @if (form.errors?.['passwordMismatch'] && form.touched) {
+      <p class="field-error">Passwords do not match</p>
+    }
     <button type="submit" [disabled]="loading">
       {{ loading ? 'Creating account…' : 'Sign up' }}
     </button>
