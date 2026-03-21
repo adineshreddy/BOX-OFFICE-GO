@@ -1,0 +1,150 @@
+<div class="detail-page">
+  <nav class="detail-nav">
+    <a routerLink="/" class="back-link">
+      <span class="back-icon" aria-hidden="true">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M15 18l-6-6 6-6" />
+        </svg>
+      </span>
+      Movies
+    </a>
+  </nav>
+
+  @if (movieError()) {
+    <p class="banner-error" role="alert">{{ movieError() }}</p>
+  }
+
+  @if (loadingMovie()) {
+    <div class="skeleton-hero" aria-busy="true">
+      <div class="sk-poster"></div>
+      <div class="sk-lines">
+        <div class="sk-line wide"></div>
+        <div class="sk-line"></div>
+        <div class="sk-line"></div>
+      </div>
+    </div>
+  } @else if (movie()) {
+    @let m = movie()!;
+    <section class="hero">
+      <div class="poster-wrap">
+        <div class="poster-frame">
+          <img
+            class="poster"
+            [src]="posterUrl(m.posterUrl)"
+            [alt]="'Poster for ' + m.title"
+            loading="eager"
+            (error)="onPosterError($event)"
+          />
+        </div>
+      </div>
+      <div class="hero-copy">
+        <p class="hero-eyebrow">Now showing</p>
+        <h1 class="title">{{ m.title }}</h1>
+        <div class="meta">
+          <span class="pill">{{ m.genre }}</span>
+          <span class="meta-sep" aria-hidden="true">·</span>
+          <span>{{ m.language }}</span>
+          <span class="meta-sep" aria-hidden="true">·</span>
+          <span>{{ m.durationMinutes }} min</span>
+          <span class="meta-sep" aria-hidden="true">·</span>
+          <span class="meta-rating">
+            <span class="star" aria-hidden="true">★</span>
+            {{ m.rating | number: '1.1-1' }}
+          </span>
+        </div>
+        <p class="description">{{ m.description }}</p>
+      </div>
+    </section>
+  }
+
+  <section class="showtimes-panel">
+    <div class="panel-header">
+      <div class="panel-intro">
+        <p class="eyebrow">Book tickets</p>
+        <h2 class="panel-title">Choose a showtime</h2>
+        <p class="panel-sub">Pick a date, then select a theater and time.</p>
+      </div>
+      <div class="date-control">
+        <label class="date-label" for="show-date">Date</label>
+        <div class="date-input-wrap">
+          <input
+            id="show-date"
+            class="date-input"
+            type="date"
+            [ngModel]="selectedDate()"
+            (ngModelChange)="selectedDate.set($event); onDateChange()"
+          />
+        </div>
+      </div>
+    </div>
+
+    @if (showtimesError()) {
+      <p class="banner-error soft" role="alert">{{ showtimesError() }}</p>
+    }
+    @if (loadingTheaters()) {
+      <div class="loading-showtimes" aria-live="polite">
+        <span class="loading-dots" aria-hidden="true"></span>
+        Loading showtimes…
+      </div>
+    } @else if (theaterData(); as data) {
+      @if (data.theaters.length === 0) {
+        <div class="empty-state">
+          <p class="empty-title">No showtimes on this day</p>
+          <p class="empty-copy">Try another date — schedules update regularly.</p>
+        </div>
+      } @else {
+        <ul class="theater-list">
+          @for (t of data.theaters; track t.theaterId) {
+            <li>
+              <article class="theater-card">
+                <header class="theater-card__head">
+                  <span class="theater-card__accent" aria-hidden="true"></span>
+                  <div class="theater-card__info">
+                    <h3 class="theater-card__name">{{ t.theaterName }}</h3>
+                    <p class="theater-card__address">
+                      <span class="pin" aria-hidden="true">📍</span>
+                      {{ t.addressLine1 }} · {{ t.city }}
+                    </p>
+                  </div>
+                </header>
+                <div class="showtime-chips" role="group" [attr.aria-label]="'Showtimes at ' + t.theaterName">
+                  @for (st of t.showtimes; track st.showtimeId) {
+                    <button
+                      type="button"
+                      class="showtime-chip"
+                      [class.showtime-chip--selected]="isSelected(t, st)"
+                      (click)="pickShowtime(t, st)"
+                    >
+                      <span class="showtime-chip__time">{{ st.startTime | date: 'h:mm a' }}</span>
+                      <span class="showtime-chip__tags">{{ st.format }} · {{ st.language }}</span>
+                      <span class="showtime-chip__hall">{{ st.screenName }}</span>
+                      <span class="showtime-chip__price">From {{ st.basePrice | currency: 'USD' : 'symbol' : '1.0-0' }}</span>
+                    </button>
+                  }
+                </div>
+              </article>
+            </li>
+          }
+        </ul>
+      }
+    }
+  </section>
+
+  @if (selectedShowtime(); as sel) {
+    <footer class="selection-bar">
+      <div class="selection-bar__inner">
+        <div class="selection-summary">
+          <span class="selection-summary__label">Your selection</span>
+          <strong class="selection-summary__when">{{
+            sel.showtime.startTime | date: 'EEE, MMM d · h:mm a'
+          }}</strong>
+          <span class="selection-summary__where">{{ sel.theater.theaterName }}</span>
+        </div>
+        <button type="button" class="btn-next" (click)="continueToSeats()">
+          Continue
+          <span class="btn-next__chev" aria-hidden="true">→</span>
+        </button>
+      </div>
+    </footer>
+  }
+</div>

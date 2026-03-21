@@ -1,0 +1,17 @@
+<div class="seats-placeholder">
+  <a [routerLink]="['/movies', movieId()]" class="back">← Back to showtimes</a>
+  <h1>Seat selection</h1>
+  @if (theaterId() && showTime()) {
+    <p class="summary">
+      Theater and show time are saved for this session. Full seat map and booking will continue here.
+    </p>
+    <dl class="params">
+      <dt>Theater</dt>
+      <dd>{{ theaterId() }}</dd>
+      <dt>Show time (RFC3339)</dt>
+      <dd class="mono">{{ showTime() }}</dd>
+    </dl>
+  } @else {
+    <p class="warn">Missing theater or show time. Go back and pick a showtime.</p>
+  }
+</div>

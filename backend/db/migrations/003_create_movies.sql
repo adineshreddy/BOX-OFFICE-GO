@@ -37,7 +37,7 @@ VALUES
         128,
         '2024-06-14',
         8.4,
-        'https://example.com/posters/starlight-horizon.jpg',
+        'https://image.tmdb.org/t/p/w500/gEU2QniE6E77NI6lCU6MxlNBvIx.jpg',
         TRUE,
         NOW(),
         NOW()
@@ -65,7 +65,7 @@ VALUES
         121,
         '2024-02-09',
         8.1,
-        'https://example.com/posters/the-last-ticket.jpg',
+        'https://image.tmdb.org/t/p/w500/arw2vcBveWOVZr6pxd9XTd1TdQa.jpg',
         TRUE,
         NOW(),
         NOW()

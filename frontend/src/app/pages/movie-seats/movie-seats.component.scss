@@ -1,0 +1,45 @@
+.seats-placeholder {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 2rem 1.5rem;
+  min-height: 60vh;
+  color: #e8e6f0;
+}
+.back {
+  color: #c4b5fd;
+  text-decoration: none;
+  font-weight: 600;
+}
+.back:hover {
+  text-decoration: underline;
+}
+h1 {
+  margin: 1rem 0;
+  font-size: 1.5rem;
+}
+.summary {
+  line-height: 1.55;
+  color: rgba(232, 230, 240, 0.85);
+}
+.params {
+  margin-top: 1.25rem;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.35rem 1rem;
+  font-size: 0.9rem;
+}
+.params dt {
+  color: rgba(232, 230, 240, 0.5);
+  margin: 0;
+}
+.params dd {
+  margin: 0;
+}
+.mono {
+  word-break: break-all;
+  font-family: ui-monospace, monospace;
+  font-size: 0.8rem;
+}
+.warn {
+  color: #fde68a;
+}

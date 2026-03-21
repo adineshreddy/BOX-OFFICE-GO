@@ -39,6 +39,32 @@ func (h *MovieHandler) ListMovies(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (h *MovieHandler) GetMovie(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		response.Error(w, http.StatusMethodNotAllowed, "method not allowed", nil)
+		return
+	}
+
+	movieID := strings.TrimSpace(r.PathValue("movieId"))
+	if movieID == "" {
+		response.Error(w, http.StatusBadRequest, "movieId path parameter is required", nil)
+		return
+	}
+
+	movie, err := h.movieService.GetMovieByID(r.Context(), movieID)
+	if err != nil {
+		if errors.Is(err, repository.ErrMovieNotFound) {
+			response.Error(w, http.StatusNotFound, "movie not found", nil)
+			return
+		}
+
+		response.Error(w, http.StatusInternalServerError, "failed to fetch movie", nil)
+		return
+	}
+
+	response.JSON(w, http.StatusOK, movie)
+}
+
 func (h *MovieHandler) GetShowDetailsBySelection(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		response.Error(w, http.StatusMethodNotAllowed, "method not allowed", nil)

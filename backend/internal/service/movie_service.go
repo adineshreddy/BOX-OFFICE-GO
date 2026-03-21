@@ -23,6 +23,10 @@ func (s *MovieService) ListMovies(ctx context.Context, titleQuery string, genreQ
 	return s.movieRepository.ListActive(ctx, titleQuery, genreQuery)
 }
 
+func (s *MovieService) GetMovieByID(ctx context.Context, movieID string) (domain.Movie, error) {
+	return s.movieRepository.GetByID(ctx, strings.TrimSpace(movieID))
+}
+
 func (s *MovieService) GetShowDetailsBySelection(ctx context.Context, movieID string, theaterID string, showTime string) (domain.ShowDetails, error) {
 	parsedShowTime, err := parseSelectionInputs(movieID, theaterID, showTime)
 	if err != nil {

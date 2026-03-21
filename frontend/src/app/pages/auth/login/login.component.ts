@@ -1,7 +1,7 @@
 import { Component } from '@angular/core';
 import { Router, RouterLink, ActivatedRoute } from '@angular/router';
 import { ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
-import { AuthService } from '../../../services/auth.service';
+import { AuthService, formatAuthHttpError } from '../../../services/auth.service';
 import { CommonModule } from '@angular/common';
 
 @Component({
@@ -47,13 +47,14 @@ export class LoginComponent {
     this.error = '';
     this.loading = true;
     this.auth.login(this.form.getRawValue()).subscribe({
-      next: (res) => {
-        this.auth.setSession(res);
-        this.router.navigate(['/']);
-      },
-      error: (err) => {
+      next: res => {
         this.loading = false;
-        this.error = err.error?.message || err.message || 'Login failed';
+        this.auth.setSessionFromLogin(res);
+        void this.router.navigate(['/']);
+      },
+      error: err => {
+        this.loading = false;
+        this.error = formatAuthHttpError(err);
       }
     });
   }
