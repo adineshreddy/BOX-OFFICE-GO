@@ -117,6 +117,44 @@ func ensureSchema(ctx context.Context, db *sql.DB) error {
 	);
 	`
 
+	createBookingHoldsTableQuery := `
+	CREATE TABLE IF NOT EXISTS booking_holds (
+		id TEXT PRIMARY KEY,
+		user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		showtime_id TEXT NOT NULL REFERENCES showtimes(id) ON DELETE CASCADE,
+		status TEXT NOT NULL CHECK (status IN ('HELD', 'CONFIRMED', 'EXPIRED', 'CANCELLED')),
+		hold_expires_at TIMESTAMPTZ NOT NULL,
+		total_amount NUMERIC(10,2) NOT NULL DEFAULT 0,
+		created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+	);
+	`
+
+	createBookingHoldSeatsTableQuery := `
+	CREATE TABLE IF NOT EXISTS booking_hold_seats (
+		hold_id TEXT NOT NULL REFERENCES booking_holds(id) ON DELETE CASCADE,
+		showtime_id TEXT NOT NULL REFERENCES showtimes(id) ON DELETE CASCADE,
+		seat_number TEXT NOT NULL,
+		price_at_hold NUMERIC(10,2) NOT NULL,
+		created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		PRIMARY KEY (hold_id, seat_number)
+	);
+	`
+
+	createBookingsTableQuery := `
+	CREATE TABLE IF NOT EXISTS bookings (
+		id TEXT PRIMARY KEY,
+		hold_id TEXT NOT NULL UNIQUE REFERENCES booking_holds(id) ON DELETE CASCADE,
+		user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		showtime_id TEXT NOT NULL REFERENCES showtimes(id) ON DELETE CASCADE,
+		status TEXT NOT NULL CHECK (status IN ('CONFIRMED', 'CANCELLED')),
+		total_amount NUMERIC(10,2) NOT NULL,
+		confirmed_at TIMESTAMPTZ NOT NULL,
+		created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+	);
+	`
+
 	if _, err := db.ExecContext(ctx, createUsersTableQuery); err != nil {
 		return err
 	}
@@ -134,6 +172,18 @@ func ensureSchema(ctx context.Context, db *sql.DB) error {
 	}
 
 	if _, err := db.ExecContext(ctx, createSeatInventoryTableQuery); err != nil {
+		return err
+	}
+
+	if _, err := db.ExecContext(ctx, createBookingHoldsTableQuery); err != nil {
+		return err
+	}
+
+	if _, err := db.ExecContext(ctx, createBookingHoldSeatsTableQuery); err != nil {
+		return err
+	}
+
+	if _, err := db.ExecContext(ctx, createBookingsTableQuery); err != nil {
 		return err
 	}
 
