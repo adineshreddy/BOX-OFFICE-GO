@@ -1,0 +1,106 @@
+package handler
+
+import (
+	"encoding/json"
+	"errors"
+	"net/http"
+	"strings"
+
+	"box-office-go/backend/internal/domain"
+	"box-office-go/backend/internal/http/response"
+	"box-office-go/backend/internal/repository"
+	"box-office-go/backend/internal/service"
+)
+
+type BookingHandler struct {
+	bookingService *service.BookingService
+}
+
+func NewBookingHandler(bookingService *service.BookingService) *BookingHandler {
+	return &BookingHandler{bookingService: bookingService}
+}
+
+func (h *BookingHandler) CreateBookingHold(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		response.Error(w, http.StatusMethodNotAllowed, "method not allowed", nil)
+		return
+	}
+
+	var input domain.CreateBookingHoldInput
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+
+	if err := decoder.Decode(&input); err != nil {
+		response.Error(w, http.StatusBadRequest, "invalid request payload", nil)
+		return
+	}
+
+	hold, err := h.bookingService.CreateBookingHold(r.Context(), input)
+	if err != nil {
+		handleBookingError(w, err)
+		return
+	}
+
+	response.JSON(w, http.StatusCreated, map[string]any{
+		"message": "booking hold created",
+		"hold":    hold,
+	})
+}
+
+func (h *BookingHandler) CheckoutBookingHold(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		response.Error(w, http.StatusMethodNotAllowed, "method not allowed", nil)
+		return
+	}
+
+	var input domain.ConfirmBookingInput
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+
+	if err := decoder.Decode(&input); err != nil {
+		response.Error(w, http.StatusBadRequest, "invalid request payload", nil)
+		return
+	}
+
+	result, err := h.bookingService.CheckoutBookingHold(r.Context(), input)
+	if err != nil {
+		handleBookingError(w, err)
+		return
+	}
+
+	response.JSON(w, http.StatusOK, map[string]any{
+		"message": "checkout successful",
+		"booking": result,
+	})
+}
+
+func handleBookingError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, repository.ErrSeatUnavailable):
+		response.Error(w, http.StatusConflict, "one or more selected seats are unavailable", nil)
+		return
+	case errors.Is(err, repository.ErrInvalidSeatSelection):
+		response.Error(w, http.StatusBadRequest, "invalid seat selection", nil)
+		return
+	case errors.Is(err, repository.ErrShowtimeNotFound):
+		response.Error(w, http.StatusNotFound, "showtime not found", nil)
+		return
+	case errors.Is(err, repository.ErrHoldNotFound):
+		response.Error(w, http.StatusNotFound, "booking hold not found", nil)
+		return
+	case errors.Is(err, repository.ErrHoldExpired):
+		response.Error(w, http.StatusConflict, "booking hold expired", nil)
+		return
+	case errors.Is(err, repository.ErrHoldFinalized):
+		response.Error(w, http.StatusConflict, "booking hold already finalized", nil)
+		return
+	}
+
+	errMessage := err.Error()
+	if strings.Contains(errMessage, "is required") || strings.Contains(errMessage, "seatNumbers") || strings.Contains(errMessage, "duplicate seat number") {
+		response.Error(w, http.StatusBadRequest, errMessage, nil)
+		return
+	}
+
+	response.Error(w, http.StatusInternalServerError, "booking operation failed", nil)
+}

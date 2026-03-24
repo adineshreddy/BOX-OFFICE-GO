@@ -1,9 +1,11 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"log"
 	"net/http"
+	"time"
 
 	"box-office-go/backend/internal/config"
 	"box-office-go/backend/internal/database"
@@ -28,11 +30,26 @@ func main() {
 
 	userRepository := postgres.NewUserRepository(db)
 	movieRepository := postgres.NewMovieRepository(db)
+	bookingRepository := postgres.NewBookingRepository(db)
 
 	authService := service.NewAuthService(userRepository)
 	movieService := service.NewMovieService(movieRepository)
+	bookingService := service.NewBookingService(bookingRepository)
 
-	api := httpRouter.New(authService, movieService)
+	go func() {
+		ticker := time.NewTicker(time.Minute)
+		defer ticker.Stop()
+
+		for {
+			if err := bookingService.ReleaseExpiredHolds(context.Background()); err != nil {
+				log.Printf("expired hold cleanup failed: %v", err)
+			}
+
+			<-ticker.C
+		}
+	}()
+
+	api := httpRouter.New(authService, movieService, bookingService)
 
 	server := &http.Server{
 		Addr:    ":" + cfg.Port,
