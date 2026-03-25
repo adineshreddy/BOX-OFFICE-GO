@@ -31,6 +31,34 @@ go run ./cmd/api
 
 Server starts on `http://localhost:8080` by default.
 
+## Run Unit Tests
+
+Run all backend unit tests:
+
+```bash
+go test ./...
+```
+
+Run with verbose output:
+
+```bash
+go test -v ./...
+```
+
+Run tests for a specific package:
+
+```bash
+go test ./internal/service
+go test ./internal/handler
+go test ./internal/validation
+```
+
+Run a specific test function:
+
+```bash
+go test ./internal/service -run TestBookingServiceCreateBookingHold_Success
+```
+
 ## Signup API
 
 - **Method**: `POST`
@@ -182,4 +210,11 @@ curl "http://localhost:8080/api/v1/movies/mov_003/theaters"
 
 ```bash
 curl "http://localhost:8080/api/v1/movies/mov_001/theaters?date=2026-02-18"
+```
+
+### 7) Cancel Booking
+
+```bash
+curl --request DELETE \
+  --url "http://localhost:8080/api/v1/bookings?bookingId=bok_123456789&userId=usr_123456789"
 ```
