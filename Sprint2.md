@@ -18,6 +18,91 @@ Sprint 2 focused on completing backend booking workflows and finalizing FE-consu
 - Seat pricing and showtime base-price behavior are normalized for current sprint assumptions.
 - Backend test suite now covers core validation, handlers, and service branches.
 
+---
+
+# Sprint 2 Frontend (Angular) Scope (Completed)
+
+## Sprint 2 Outcome Summary (Frontend)
+- Implemented the full user booking journey UI: movie browsing → movie details → showtime selection → seat map → seat selection → login gating → seat hold (ready for payment/checkout UI).
+- Integrated frontend with Sprint 2 backend APIs for show details, seat map, and booking holds.
+- Added frontend unit tests and a Cypress E2E test.
+
+## Features Implemented
+
+### 1) View Movie Details and Select Showtime
+- **Movie details page** (`/movies/:movieId`) displays movie info and poster.
+- **Showtime + theater selection**:
+  - Date picker to filter showtimes.
+  - “Continue” button appears after selecting a showtime and navigates to seat selection.
+
+Backend integration:
+- `GET /api/v1/movies/{movieId}`
+- `GET /api/v1/movies/{movieId}/theaters?date=YYYY-MM-DD`
+
+### 2) Theater Seat Map + Seat Selection UI
+- **Seat selection page** (`/movies/:movieId/seats?theaterId=...&showTime=...`) loads seat map and show metadata.
+- Flow matches standard ticketing UX:
+  - First prompts **“How many seats?”**
+  - Then allows selecting exactly that many seats.
+  - Prevents selecting blocked seats.
+  - Shows legend and selection summary.
+
+Backend integration:
+- `GET /api/v1/shows/details?movieId=...&theaterId=...&showTime=...`
+- `GET /api/v1/shows/seat-map?movieId=...&theaterId=...&showTime=...`
+
+### 3) Enforced Login After Seat Selection (Before Payment)
+- If user is not logged in and clicks **Continue** on the seat page:
+  - The selected seats + context are stored temporarily in `localStorage` under `pending_booking_hold`.
+  - User is redirected to `/login`.
+- After successful login:
+  - App redirects back to the seat page using the saved `pending_booking_hold`.
+  - The seat page automatically attempts to create a hold (Preference B flow).
+
+### 4) Create Seat Hold (Backend-Driven Conflict Handling)
+- On seat confirmation, frontend calls backend **hold** API:
+  - `POST /api/v1/bookings/holds` with `userId`, `showtimeId`, and `seatNumbers`.
+- If backend returns conflict (HTTP `409`), frontend:
+  - Clears current seat selection
+  - Refreshes seat map
+  - Shows a reselect message (handles “two users chose same seats” scenario)
+
+Backend integration:
+- `POST /api/v1/bookings/holds`
+
+## Frontend Unit Tests (Implemented)
+Location: `frontend/src/**/*.spec.ts`
+
+Current snapshot:
+- Test files: 5
+- Test cases: 9
+
+Test files:
+- `frontend/src/app/app.spec.ts`
+- `frontend/src/app/pages/movie-detail/movie-detail.component.spec.ts`
+- `frontend/src/app/pages/movie-seats/movie-seats.component.spec.ts`
+- `frontend/src/app/services/auth.service.spec.ts`
+- `frontend/src/app/services/movie.service.spec.ts`
+
+How to run:
+```bash
+cd frontend
+npm test -- --watch=false
+```
+
+## Frontend Cypress E2E Test (Implemented)
+Location: `frontend/cypress/e2e/`
+
+Test file:
+- `frontend/cypress/e2e/login.cy.ts` (logs in and verifies logout is shown)
+
+How to run:
+```bash
+cd frontend
+npx cypress install
+npx cypress run
+```
+
 ## Backend Unit Tests (Implemented)
 
 Current snapshot:
