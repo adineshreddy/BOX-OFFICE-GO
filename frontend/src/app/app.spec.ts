@@ -1,10 +1,26 @@
 import { TestBed } from '@angular/core/testing';
 import { App } from './app';
+import { ActivatedRoute, provideRouter } from '@angular/router';
+import { BehaviorSubject } from 'rxjs';
+import { routes } from './app.routes';
 
 describe('App', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [App],
+      providers: [
+        provideRouter(routes),
+        {
+          provide: ActivatedRoute,
+          useValue: {
+            snapshot: {},
+            params: {},
+            queryParams: {},
+            paramMap: new BehaviorSubject(new Map()),
+            queryParamMap: new BehaviorSubject(new Map())
+          }
+        }
+      ]
     }).compileComponents();
   });
 
@@ -18,6 +34,8 @@ describe('App', () => {
     const fixture = TestBed.createComponent(App);
     await fixture.whenStable();
     const compiled = fixture.nativeElement as HTMLElement;
-    expect(compiled.querySelector('h1')?.textContent).toContain('Hello, frontend');
+
+    const logoText = compiled.querySelector('.logo-text')?.textContent ?? '';
+    expect(logoText).toContain('Box Office Go');
   });
 });
