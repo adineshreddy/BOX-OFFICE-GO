@@ -6,6 +6,14 @@ import { environment } from '../../environments/environment';
 export class BookingService {
   constructor(private http: HttpClient) {}
 
+  createBookingHold(data: { userId: string; showtimeId: string; seatNumbers: string[] }) {
+    return this.http.post(`${environment.apiUrl}/bookings/holds`, data);
+  }
+
+  checkoutBookingHold(data: { holdId: string; userId: string }) {
+    return this.http.post(`${environment.apiUrl}/bookings/checkout`, data);
+  }
+
   getSeats(showId: string) {
     return this.http.get(`${environment.apiUrl}/shows/${showId}/seats`);
   }

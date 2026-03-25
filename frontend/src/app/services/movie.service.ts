@@ -5,7 +5,9 @@ import { environment } from '../../environments/environment';
 import {
   ApiMovie,
   MovieListResponse,
-  MovieTheaterListResponse
+  MovieTheaterListResponse,
+  SeatMapResponse,
+  ShowDetails
 } from '../models/movie.models';
 
 @Injectable({ providedIn: 'root' })
@@ -36,5 +38,21 @@ export class MovieService {
       `${environment.apiUrl}/movies/${encodeURIComponent(movieId)}/theaters`,
       { params }
     );
+  }
+
+  getShowDetailsBySelection(movieId: string, theaterId: string, showTime: string): Observable<ShowDetails> {
+    const params = new HttpParams()
+      .set('movieId', movieId)
+      .set('theaterId', theaterId)
+      .set('showTime', showTime);
+    return this.http.get<ShowDetails>(`${environment.apiUrl}/shows/details`, { params });
+  }
+
+  getSeatMapBySelection(movieId: string, theaterId: string, showTime: string): Observable<SeatMapResponse> {
+    const params = new HttpParams()
+      .set('movieId', movieId)
+      .set('theaterId', theaterId)
+      .set('showTime', showTime);
+    return this.http.get<SeatMapResponse>(`${environment.apiUrl}/shows/seat-map`, { params });
   }
 }
