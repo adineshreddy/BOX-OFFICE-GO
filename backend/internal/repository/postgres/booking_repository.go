@@ -299,4 +299,152 @@ func (r *BookingRepository) CheckoutHold(ctx context.Context, holdID string, use
 	}, nil
 }
 
+func (r *BookingRepository) ListByUserID(ctx context.Context, userID string) ([]domain.UserBooking, error) {
+	query := `
+	SELECT
+		b.id,
+		b.hold_id,
+		b.user_id,
+		b.showtime_id,
+		b.status,
+		b.total_amount,
+		b.confirmed_at,
+		m.title AS movie_title,
+		t.name AS theater_name,
+		t.city,
+		s.screen_name,
+		s.start_time,
+		s.language,
+		s.format
+	FROM bookings b
+	JOIN showtimes s ON s.id = b.showtime_id
+	JOIN movies m ON m.id = s.movie_id
+	JOIN theaters t ON t.id = s.theater_id
+	WHERE b.user_id = $1
+	ORDER BY b.confirmed_at DESC
+	`
+
+	rows, err := r.db.QueryContext(ctx, query, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	bookings := make([]domain.UserBooking, 0)
+	for rows.Next() {
+		var ub domain.UserBooking
+
+		if scanErr := rows.Scan(
+			&ub.BookingID,
+			&ub.HoldID,
+			&ub.UserID,
+			&ub.ShowtimeID,
+			&ub.Status,
+			&ub.TotalAmount,
+			&ub.ConfirmedAt,
+			&ub.MovieTitle,
+			&ub.TheaterName,
+			&ub.City,
+			&ub.ScreenName,
+			&ub.ShowTime,
+			&ub.Language,
+			&ub.Format,
+		); scanErr != nil {
+			return nil, scanErr
+		}
+
+		// Fetch seat numbers from booking_hold_seats
+		seatRows, seatErr := r.db.QueryContext(ctx,
+			`SELECT seat_number FROM booking_hold_seats WHERE hold_id = $1 ORDER BY seat_number ASC`,
+			ub.HoldID,
+		)
+		if seatErr != nil {
+			return nil, seatErr
+		}
+
+		seats := make([]string, 0)
+		for seatRows.Next() {
+			var seat string
+			if err := seatRows.Scan(&seat); err != nil {
+				seatRows.Close()
+				return nil, err
+			}
+			seats = append(seats, seat)
+		}
+		seatRows.Close()
+		if err := seatRows.Err(); err != nil {
+			return nil, err
+		}
+
+		ub.SeatNumbers = seats
+		bookings = append(bookings, ub)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return bookings, nil
+}
+
+func (r *BookingRepository) CancelBooking(ctx context.Context, bookingID string, userID string) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	var status string
+	var holdID string
+	var showtimeID string
+
+	err = tx.QueryRowContext(ctx,
+		`SELECT status, hold_id, showtime_id FROM bookings WHERE id = $1 AND user_id = $2 FOR UPDATE`,
+		bookingID, userID,
+	).Scan(&status, &holdID, &showtimeID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return repository.ErrBookingNotFound
+		}
+		return err
+	}
+
+	if status == "CANCELLED" {
+		return repository.ErrBookingAlreadyCancelled
+	}
+
+	now := time.Now().UTC()
+
+	// Cancel the booking
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE bookings SET status = 'CANCELLED', updated_at = $2 WHERE id = $1`,
+		bookingID, now,
+	); err != nil {
+		return err
+	}
+
+	// Cancel the associated hold
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE booking_holds SET status = 'CANCELLED', updated_at = $2 WHERE id = $1`,
+		holdID, now,
+	); err != nil {
+		return err
+	}
+
+	// Release seats: mark them as available and not held
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE seat_inventory si
+		 SET is_available = TRUE, is_held = FALSE, updated_at = $2
+		 FROM booking_hold_seats bhs
+		 WHERE bhs.hold_id = $1
+		   AND si.showtime_id = bhs.showtime_id
+		   AND si.seat_number = bhs.seat_number`,
+		holdID, now,
+	); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
 var _ repository.BookingRepository = (*BookingRepository)(nil)

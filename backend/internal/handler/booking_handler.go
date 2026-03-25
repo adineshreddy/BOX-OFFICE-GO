@@ -104,3 +104,65 @@ func handleBookingError(w http.ResponseWriter, err error) {
 
 	response.Error(w, http.StatusInternalServerError, "booking operation failed", nil)
 }
+
+// GET /api/v1/bookings?user_id=<userId>
+func (h *BookingHandler) GetUserBookings(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		response.Error(w, http.StatusMethodNotAllowed, "method not allowed", nil)
+		return
+	}
+
+	userID := strings.TrimSpace(r.URL.Query().Get("user_id"))
+	if userID == "" {
+		response.Error(w, http.StatusBadRequest, "user_id query parameter is required", nil)
+		return
+	}
+
+	bookings, err := h.bookingService.GetUserBookings(r.Context(), userID)
+	if err != nil {
+		handleBookingError(w, err)
+		return
+	}
+
+	response.JSON(w, http.StatusOK, map[string]any{
+		"bookings": bookings,
+	})
+}
+
+// DELETE /api/v1/bookings/{bookingId}?user_id=<userId>
+func (h *BookingHandler) CancelBooking(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete {
+		response.Error(w, http.StatusMethodNotAllowed, "method not allowed", nil)
+		return
+	}
+
+	bookingID := strings.TrimSpace(r.PathValue("bookingId"))
+	if bookingID == "" {
+		response.Error(w, http.StatusBadRequest, "bookingId path parameter is required", nil)
+		return
+	}
+
+	userID := strings.TrimSpace(r.URL.Query().Get("user_id"))
+	if userID == "" {
+		response.Error(w, http.StatusBadRequest, "user_id query parameter is required", nil)
+		return
+	}
+
+	err := h.bookingService.CancelBooking(r.Context(), bookingID, userID)
+	if err != nil {
+		if errors.Is(err, repository.ErrBookingNotFound) {
+			response.Error(w, http.StatusNotFound, "booking not found", nil)
+			return
+		}
+		if errors.Is(err, repository.ErrBookingAlreadyCancelled) {
+			response.Error(w, http.StatusConflict, "booking is already cancelled", nil)
+			return
+		}
+		handleBookingError(w, err)
+		return
+	}
+
+	response.JSON(w, http.StatusOK, map[string]string{
+		"message": "booking cancelled successfully",
+	})
+}
