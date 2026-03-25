@@ -1,7 +1,51 @@
+# Sprint 2 Report
+
+GitHub Link: https://github.com/adineshreddy/BOX-OFFICE-GO
+
+## Sprint Overview
+Sprint 2 focused on completing backend booking workflows and finalizing FE-consumable APIs for show selection, seat visibility, hold/checkout flow, and booking management.
+
+## Sprint 2 Backend Scope (Completed)
+- Show details + seat map + seat availability APIs.
+- Booking hold + checkout workflow with hold expiry handling.
+- Booking management APIs: user booking list and booking cancel.
+- Contract hardening: ID-based query contract (`movieId`, `theaterId`, `showTime`) and `userId` query preference (with `user_id` compatibility).
+- Stability updates: hold cleanup worker, non-destructive startup schema handling, and expanded unit tests.
+
+## Sprint 2 Outcome Summary
+- Backend APIs required by current frontend flows are implemented and wired.
+- Hold lifecycle behavior is enforced (`HELD`, `EXPIRED`, `CONFIRMED`, `CANCELLED`) with automatic release after expiry.
+- Seat pricing and showtime base-price behavior are normalized for current sprint assumptions.
+- Backend test suite now covers core validation, handlers, and service branches.
+
+## Backend Unit Tests (Implemented)
+
+Current snapshot:
+- Test files: 13
+- Test functions: 66
+- Production functions (backend/internal): 65
+
+Test files:
+- backend/internal/config/config_test.go
+- backend/internal/handler/auth_handler_extra_test.go
+- backend/internal/handler/auth_handler_test.go
+- backend/internal/handler/booking_handler_test.go
+- backend/internal/handler/movie_handler_extra_test.go
+- backend/internal/handler/movie_handler_test.go
+- backend/internal/http/middleware/cors_test.go
+- backend/internal/http/response/response_test.go
+- backend/internal/service/auth_service_test.go
+- backend/internal/service/booking_service_test.go
+- backend/internal/service/movie_service_test.go
+- backend/internal/validation/login_validation_test.go
+- backend/internal/validation/signup_validation_test.go
+
+---
+
 # Sprint 2 Backend API Documentation
 
 ## Scope
-This document is a frontend-focused backend API guide for Sprint 2.
+This section is a frontend-focused backend API guide for Sprint 2.
 It includes:
 - endpoint purpose
 - request parameters and data types
@@ -215,6 +259,45 @@ curl "http://localhost:8080/api/v1/movies"
 With filters:
 ```bash
 curl "http://localhost:8080/api/v1/movies?title=Star&genre=Sci"
+```
+
+---
+
+### API Name
+Get Movie by ID
+
+### API
+`GET /api/v1/movies/{movieId}`
+
+### What It Does
+Returns details of a single movie by `movieId`.
+
+### Path Parameters
+| Param | Type | Required |
+|---|---|---|
+| movieId | string | yes |
+
+### Success Response (200)
+```json
+{
+  "id": "mov_001",
+  "title": "Starlight Horizon",
+  "description": "...",
+  "genre": "Sci-Fi",
+  "language": "English",
+  "durationMinutes": 128,
+  "releaseDate": "2024-06-14T00:00:00Z",
+  "rating": 8.4,
+  "posterUrl": "https://...",
+  "isActive": true,
+  "createdAt": "2026-...",
+  "updatedAt": "2026-..."
+}
+```
+
+### Curl
+```bash
+curl "http://localhost:8080/api/v1/movies/mov_001"
 ```
 
 ---
@@ -519,6 +602,85 @@ curl --request POST \
 
 ---
 
+### API Name
+Get User Bookings
+
+### API
+`GET /api/v1/bookings`
+
+### What It Does
+Returns all bookings for a given user.
+
+### Query Parameters
+| Param | Type | Required | Notes |
+|---|---|---|---|
+| userId | string | yes | primary param |
+| user_id | string | no | backward-compatible alias |
+
+### Success Response (200)
+```json
+{
+  "bookings": [
+    {
+      "bookingId": "bok_...",
+      "holdId": "hold_...",
+      "userId": "usr_...",
+      "showtimeId": "st_...",
+      "seatNumbers": ["A01", "A02"],
+      "status": "CONFIRMED",
+      "totalAmount": 33.6,
+      "confirmedAt": "2026-03-21T16:12:00Z",
+      "movieTitle": "Starlight Horizon",
+      "theaterName": "AMC Downtown 12",
+      "city": "New York",
+      "screenName": "Screen 1",
+      "showTime": "2026-03-21T15:00:00Z",
+      "language": "English",
+      "format": "2D"
+    }
+  ]
+}
+```
+
+### Curl
+```bash
+curl -G "http://localhost:8080/api/v1/bookings" \
+  --data-urlencode "userId=usr_123456789"
+```
+
+---
+
+### API Name
+Cancel Booking
+
+### API
+`DELETE /api/v1/bookings?bookingId={bookingId}&userId={userId}`
+
+### What It Does
+Cancels a user booking and releases seats back to availability.
+
+### Query Parameters
+| Param | Type | Required | Notes |
+|---|---|---|---|
+| bookingId | string | yes | booking to cancel |
+| userId | string | yes | primary param |
+| user_id | string | no | backward-compatible alias |
+
+### Success Response (200)
+```json
+{
+  "message": "booking cancelled successfully"
+}
+```
+
+### Curl
+```bash
+curl --request DELETE \
+  --url "http://localhost:8080/api/v1/bookings?bookingId=bok_123456789&userId=usr_123456789"
+```
+
+---
+
 ## Booking Lifecycle Behavior (Important for FE)
 
 ### Hold Duration
@@ -555,12 +717,15 @@ curl --request POST \
 | POST /api/v1/auth/signup | no | yes | yes | no | yes | no | yes |
 | POST /api/v1/auth/login | yes | no | yes | no | yes | no | yes |
 | GET /api/v1/movies | yes | no | no | no | yes | no | yes |
+| GET /api/v1/movies/{movieId} | yes | no | yes | yes | yes | no | yes |
 | GET /api/v1/movies/{movieId}/theaters | yes | no | yes | yes | yes | yes | yes |
 | GET /api/v1/shows/details | yes | no | yes | yes | yes | no | yes |
 | GET /api/v1/shows/seat-map | yes | no | yes | yes | yes | no | yes |
 | GET /api/v1/shows/seat-map/availability | yes | no | yes | yes | yes | no | yes |
 | POST /api/v1/bookings/holds | no | yes | yes | yes | yes | yes | yes |
 | POST /api/v1/bookings/checkout | yes | no | yes | yes | yes | yes | yes |
+| GET /api/v1/bookings | yes | no | yes | no | yes | no | yes |
+| DELETE /api/v1/bookings | yes | no | yes | yes | yes | yes | yes |
 
 ---
 
@@ -571,3 +736,4 @@ curl --request POST \
 3. `showTime` must be exact RFC3339 timestamp matching selected show start time.
 4. `basePrice` is currently normalized to `12.00` for showtimes.
 5. Seat map pricing per seat can differ by `priceFactor`; total hold amount is computed backend-side.
+6. Booking list/cancel endpoints now prefer `userId` query param; `user_id` is still accepted for backward compatibility.

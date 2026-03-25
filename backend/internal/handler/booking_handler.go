@@ -112,9 +112,12 @@ func (h *BookingHandler) GetUserBookings(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	userID := strings.TrimSpace(r.URL.Query().Get("user_id"))
+	userID := strings.TrimSpace(r.URL.Query().Get("userId"))
 	if userID == "" {
-		response.Error(w, http.StatusBadRequest, "user_id query parameter is required", nil)
+		userID = strings.TrimSpace(r.URL.Query().Get("user_id"))
+	}
+	if userID == "" {
+		response.Error(w, http.StatusBadRequest, "userId query parameter is required", nil)
 		return
 	}
 
@@ -129,22 +132,25 @@ func (h *BookingHandler) GetUserBookings(w http.ResponseWriter, r *http.Request)
 	})
 }
 
-// DELETE /api/v1/bookings/{bookingId}?user_id=<userId>
+// DELETE /api/v1/bookings?bookingId=<bookingId>&userId=<userId>
 func (h *BookingHandler) CancelBooking(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodDelete {
 		response.Error(w, http.StatusMethodNotAllowed, "method not allowed", nil)
 		return
 	}
 
-	bookingID := strings.TrimSpace(r.PathValue("bookingId"))
+	bookingID := strings.TrimSpace(r.URL.Query().Get("bookingId"))
 	if bookingID == "" {
-		response.Error(w, http.StatusBadRequest, "bookingId path parameter is required", nil)
+		response.Error(w, http.StatusBadRequest, "bookingId query parameter is required", nil)
 		return
 	}
 
-	userID := strings.TrimSpace(r.URL.Query().Get("user_id"))
+	userID := strings.TrimSpace(r.URL.Query().Get("userId"))
 	if userID == "" {
-		response.Error(w, http.StatusBadRequest, "user_id query parameter is required", nil)
+		userID = strings.TrimSpace(r.URL.Query().Get("user_id"))
+	}
+	if userID == "" {
+		response.Error(w, http.StatusBadRequest, "userId query parameter is required", nil)
 		return
 	}
 
