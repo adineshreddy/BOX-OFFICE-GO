@@ -22,6 +22,8 @@ func New(authService *service.AuthService, movieService *service.MovieService, b
 	mux.HandleFunc("POST /api/v1/auth/login", authHandler.Login)
 	mux.HandleFunc("POST /api/v1/bookings/holds", bookingHandler.CreateBookingHold)
 	mux.HandleFunc("POST /api/v1/bookings/checkout", bookingHandler.CheckoutBookingHold)
+	mux.HandleFunc("GET /api/v1/bookings", bookingHandler.GetUserBookings)
+	mux.HandleFunc("DELETE /api/v1/bookings/{bookingId}", bookingHandler.CancelBooking)
 	mux.HandleFunc("GET /api/v1/movies", movieHandler.ListMovies)
 	mux.HandleFunc("GET /api/v1/movies/{movieId}", movieHandler.GetMovie)
 	mux.HandleFunc("GET /api/v1/shows/details", movieHandler.GetShowDetailsBySelection)

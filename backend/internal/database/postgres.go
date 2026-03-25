@@ -142,6 +142,7 @@ func ensureSchema(ctx context.Context, db *sql.DB) error {
 	`
 
 	createBookingsTableQuery := `
+	DROP TABLE IF EXISTS bookings;
 	CREATE TABLE IF NOT EXISTS bookings (
 		id TEXT PRIMARY KEY,
 		hold_id TEXT NOT NULL UNIQUE REFERENCES booking_holds(id) ON DELETE CASCADE,

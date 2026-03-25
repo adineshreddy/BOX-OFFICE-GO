@@ -103,3 +103,26 @@ func normalizeHoldInput(input domain.CreateBookingHoldInput) (domain.CreateBooki
 		SeatNumbers: seatNumbers,
 	}, nil
 }
+
+func (s *BookingService) GetUserBookings(ctx context.Context, userID string) ([]domain.UserBooking, error) {
+	trimmed := strings.TrimSpace(userID)
+	if trimmed == "" {
+		return nil, fmt.Errorf("userId is required")
+	}
+
+	return s.bookingRepository.ListByUserID(ctx, trimmed)
+}
+
+func (s *BookingService) CancelBooking(ctx context.Context, bookingID string, userID string) error {
+	bid := strings.TrimSpace(bookingID)
+	if bid == "" {
+		return fmt.Errorf("bookingId is required")
+	}
+
+	uid := strings.TrimSpace(userID)
+	if uid == "" {
+		return fmt.Errorf("userId is required")
+	}
+
+	return s.bookingRepository.CancelBooking(ctx, bid, uid)
+}
