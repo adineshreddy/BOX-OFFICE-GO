@@ -1,17 +1,120 @@
-<div class="seats-placeholder">
+<div class="seats-page">
   <a [routerLink]="['/movies', movieId()]" class="back">← Back to showtimes</a>
-  <h1>Seat selection</h1>
-  @if (theaterId() && showTime()) {
-    <p class="summary">
-      Theater and show time are saved for this session. Full seat map and booking will continue here.
-    </p>
-    <dl class="params">
-      <dt>Theater</dt>
-      <dd>{{ theaterId() }}</dd>
-      <dt>Show time (RFC3339)</dt>
-      <dd class="mono">{{ showTime() }}</dd>
-    </dl>
-  } @else {
-    <p class="warn">Missing theater or show time. Go back and pick a showtime.</p>
+
+  @if (loading()) {
+    <p class="status">Loading theater map...</p>
+  } @else if (error()) {
+    <p class="warn">{{ error() }}</p>
+  } @else if (seatMap(); as map) {
+    <header class="seat-header">
+      <h1>{{ map.theaterName }} · {{ map.screenName }}</h1>
+      <p>{{ map.movieTitle }} · {{ map.showTime | date: 'EEE, MMM d · h:mm a' }}</p>
+      <p class="meta">{{ map.availableSeats }} seats available</p>
+    </header>
+
+    @if (ticketPromptOpen()) {
+      <div class="ticket-modal-overlay">
+        <div class="ticket-modal">
+          <h2>How many seats?</h2>
+          <p>Select how many tickets you want before choosing seats.</p>
+          <div class="ticket-options">
+            @for (count of [1, 2, 3, 4, 5, 6]; track count) {
+              <button type="button" class="ticket-pill" (click)="chooseTicketCount(count)">
+                {{ count }}
+              </button>
+            }
+          </div>
+        </div>
+      </div>
+    }
+
+    <div class="layout">
+      <section class="seat-map">
+        <div class="map-grid">
+          @for (row of map.rows; track row.rowLabel) {
+            <div class="seat-row">
+              <span class="row-label">{{ row.rowLabel }}</span>
+              <div class="row-seats">
+                @for (seat of row.seats; track seat.seatNumber) {
+                  <button
+                    type="button"
+                    class="seat"
+                    [class.sold]="isSeatSold(seat)"
+                    [class.selected]="isSeatSelected(seat.seatNumber)"
+                    [disabled]="isSeatUnavailable(seat)"
+                    (click)="toggleSeat(seat)"
+                    [attr.aria-label]="'Seat ' + seat.seatNumber"
+                  >
+                    {{ seat.seatIndex }}
+                  </button>
+                }
+              </div>
+            </div>
+          }
+          <div class="screen">All eyes this way please</div>
+        </div>
+
+        <div class="legend">
+          <span class="legend-item">
+            <i class="legend-dot available"></i>
+            <span class="legend-index">1</span>
+            Available
+          </span>
+          <span class="legend-item">
+            <i class="legend-dot sold"></i>
+            <span class="legend-index">2</span>
+            Sold
+          </span>
+          <span class="legend-item">
+            <i class="legend-dot selected"></i>
+            <span class="legend-index">3</span>
+            Selected
+          </span>
+        </div>
+      </section>
+
+      <aside class="selection-summary">
+        <h3>Your selection</h3>
+        <label for="ticket-count">Number of seats</label>
+        <select
+          id="ticket-count"
+          [ngModel]="ticketCount()"
+          (ngModelChange)="onTicketCountChange($event)"
+          class="ticket-dropdown"
+          [disabled]="holdCreated() || holdInProgress()"
+        >
+          @for (count of ticketOptions(); track count) {
+            <option [value]="count">{{ count }}</option>
+          }
+        </select>
+        <p>Selected: {{ selectedSeats().length }} / {{ ticketCount() }}</p>
+        <p class="selected-seats">{{ selectedSeats().join(', ') || 'No seats selected' }}</p>
+
+        <button
+          type="button"
+          class="btn-confirm"
+          [disabled]="
+            holdCreated() ||
+            holdInProgress() ||
+            ticketPromptOpen() ||
+            selectedSeats().length !== ticketCount()
+          "
+          (click)="confirmSeatsHold()"
+        >
+          {{ holdInProgress() ? 'Holding...' : holdCreated() ? 'Held' : 'Continue' }}
+        </button>
+
+        @if (holdError()) {
+          <p class="warn inline">{{ holdError() }}</p>
+        }
+        @if (holdSuccess()) {
+          <p class="success inline">{{ holdSuccess() }}</p>
+        }
+      </aside>
+    </div>
+
+    @if (selectionError()) {
+      <p class="warn inline">{{ selectionError() }}</p>
+    }
   }
 </div>

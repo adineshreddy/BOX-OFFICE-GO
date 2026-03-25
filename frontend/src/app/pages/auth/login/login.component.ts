@@ -50,6 +50,27 @@ export class LoginComponent {
       next: res => {
         this.loading = false;
         this.auth.setSessionFromLogin(res);
+        const pendingRaw = localStorage.getItem('pending_booking_hold');
+        if (pendingRaw) {
+          try {
+            const pending = JSON.parse(pendingRaw) as {
+              movieId?: string;
+              theaterId?: string;
+              showTime?: string;
+            };
+            if (pending.movieId && pending.theaterId && pending.showTime) {
+              void this.router.navigate(['/movies', pending.movieId, 'seats'], {
+                queryParams: {
+                  theaterId: pending.theaterId,
+                  showTime: pending.showTime
+                }
+              });
+              return;
+            }
+          } catch {
+            // If parsing fails, fall back to default behavior.
+          }
+        }
         void this.router.navigate(['/']);
       },
       error: err => {
