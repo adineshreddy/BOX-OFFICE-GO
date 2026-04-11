@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"box-office-go/backend/internal/domain"
+	"box-office-go/backend/internal/http/middleware"
 	"box-office-go/backend/internal/http/response"
 	"box-office-go/backend/internal/repository"
 	"box-office-go/backend/internal/service"
@@ -35,6 +36,13 @@ func (h *BookingHandler) CreateBookingHold(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	identity, ok := middleware.AuthIdentityFromContext(r.Context())
+	if !ok || identity.UserID == "" {
+		response.Error(w, http.StatusUnauthorized, "unauthorized", nil)
+		return
+	}
+	input.UserID = identity.UserID
+
 	hold, err := h.bookingService.CreateBookingHold(r.Context(), input)
 	if err != nil {
 		handleBookingError(w, err)
@@ -61,6 +69,13 @@ func (h *BookingHandler) CheckoutBookingHold(w http.ResponseWriter, r *http.Requ
 		response.Error(w, http.StatusBadRequest, "invalid request payload", nil)
 		return
 	}
+
+	identity, ok := middleware.AuthIdentityFromContext(r.Context())
+	if !ok || identity.UserID == "" {
+		response.Error(w, http.StatusUnauthorized, "unauthorized", nil)
+		return
+	}
+	input.UserID = identity.UserID
 
 	result, err := h.bookingService.CheckoutBookingHold(r.Context(), input)
 	if err != nil {
@@ -105,23 +120,20 @@ func handleBookingError(w http.ResponseWriter, err error) {
 	response.Error(w, http.StatusInternalServerError, "booking operation failed", nil)
 }
 
-// GET /api/v1/bookings?user_id=<userId>
+// GET /api/v1/bookings
 func (h *BookingHandler) GetUserBookings(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		response.Error(w, http.StatusMethodNotAllowed, "method not allowed", nil)
 		return
 	}
 
-	userID := strings.TrimSpace(r.URL.Query().Get("userId"))
-	if userID == "" {
-		userID = strings.TrimSpace(r.URL.Query().Get("user_id"))
-	}
-	if userID == "" {
-		response.Error(w, http.StatusBadRequest, "userId query parameter is required", nil)
+	identity, ok := middleware.AuthIdentityFromContext(r.Context())
+	if !ok || identity.UserID == "" {
+		response.Error(w, http.StatusUnauthorized, "unauthorized", nil)
 		return
 	}
 
-	bookings, err := h.bookingService.GetUserBookings(r.Context(), userID)
+	bookings, err := h.bookingService.GetUserBookings(r.Context(), identity.UserID)
 	if err != nil {
 		handleBookingError(w, err)
 		return
@@ -132,7 +144,7 @@ func (h *BookingHandler) GetUserBookings(w http.ResponseWriter, r *http.Request)
 	})
 }
 
-// DELETE /api/v1/bookings?bookingId=<bookingId>&userId=<userId>
+// DELETE /api/v1/bookings?bookingId=<bookingId>
 func (h *BookingHandler) CancelBooking(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodDelete {
 		response.Error(w, http.StatusMethodNotAllowed, "method not allowed", nil)
@@ -145,16 +157,13 @@ func (h *BookingHandler) CancelBooking(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userID := strings.TrimSpace(r.URL.Query().Get("userId"))
-	if userID == "" {
-		userID = strings.TrimSpace(r.URL.Query().Get("user_id"))
-	}
-	if userID == "" {
-		response.Error(w, http.StatusBadRequest, "userId query parameter is required", nil)
+	identity, ok := middleware.AuthIdentityFromContext(r.Context())
+	if !ok || identity.UserID == "" {
+		response.Error(w, http.StatusUnauthorized, "unauthorized", nil)
 		return
 	}
 
-	err := h.bookingService.CancelBooking(r.Context(), bookingID, userID)
+	err := h.bookingService.CancelBooking(r.Context(), bookingID, identity.UserID)
 	if err != nil {
 		if errors.Is(err, repository.ErrBookingNotFound) {
 			response.Error(w, http.StatusNotFound, "booking not found", nil)

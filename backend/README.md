@@ -15,6 +15,10 @@ cp .env.example .env
 
 Set `DATABASE_URL` from Neon dashboard (Connection Details → Pooled connection string).
 
+Optional auth configuration:
+- `JWT_SECRET` (default: `dev-secret-change-me`)
+- `AUTH_TOKEN_TTL_MINUTES` (default: `1440`)
+
 ## Initialize Schema in Neon
 
 Option 1 (already automated): app startup creates `users` table if missing.
@@ -138,6 +142,7 @@ curl -X POST http://localhost:8080/api/v1/auth/login \
 ```
 
 Expected: HTTP `200` and user payload.
+Response now also includes `accessToken`, `tokenType` (`Bearer`), and `expiresAt`.
 
 Invalid password/email: HTTP `400` with `invalid email or password`.
 
@@ -216,5 +221,6 @@ curl "http://localhost:8080/api/v1/movies/mov_001/theaters?date=2026-02-18"
 
 ```bash
 curl --request DELETE \
-  --url "http://localhost:8080/api/v1/bookings?bookingId=bok_123456789&userId=usr_123456789"
+  --url "http://localhost:8080/api/v1/bookings?bookingId=bok_123456789" \
+  --header "Authorization: Bearer <access-token>"
 ```

@@ -11,15 +11,17 @@ import (
 )
 
 type UserRepository struct {
-	mu      sync.RWMutex
-	users   map[string]domain.User
-	usersBy map[string]string
+	mu       sync.RWMutex
+	users    map[string]domain.User
+	usersBy  map[string]string
+	sessions map[string]domain.AuthSession
 }
 
 func NewUserRepository() *UserRepository {
 	return &UserRepository{
-		users:   make(map[string]domain.User),
-		usersBy: make(map[string]string),
+		users:    make(map[string]domain.User),
+		usersBy:  make(map[string]string),
+		sessions: make(map[string]domain.AuthSession),
 	}
 }
 
@@ -68,6 +70,43 @@ func (r *UserRepository) UpdateLastLogin(_ context.Context, userID string, logge
 	user.LastLoginAt = &loggedAt
 	user.UpdatedAt = loggedAt
 	r.users[userID] = user
+
+	return nil
+}
+
+func (r *UserRepository) CreateSession(_ context.Context, session domain.AuthSession) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.sessions[session.TokenID] = session
+	return nil
+}
+
+func (r *UserRepository) GetSessionByTokenID(_ context.Context, tokenID string) (domain.AuthSession, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	session, found := r.sessions[strings.TrimSpace(tokenID)]
+	if !found {
+		return domain.AuthSession{}, repository.ErrSessionNotFound
+	}
+
+	return session, nil
+}
+
+func (r *UserRepository) RevokeSessionByTokenID(_ context.Context, tokenID string, revokedAt time.Time) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	normalized := strings.TrimSpace(tokenID)
+	session, found := r.sessions[normalized]
+	if !found {
+		return repository.ErrSessionNotFound
+	}
+	if session.RevokedAt == nil {
+		session.RevokedAt = &revokedAt
+		r.sessions[normalized] = session
+	}
 
 	return nil
 }

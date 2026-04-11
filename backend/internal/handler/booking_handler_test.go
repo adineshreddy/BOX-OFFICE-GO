@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"box-office-go/backend/internal/domain"
+	"box-office-go/backend/internal/http/middleware"
 	"box-office-go/backend/internal/repository"
 	"box-office-go/backend/internal/service"
 )
@@ -50,6 +51,11 @@ func newBookingHandlerForTest(repo repository.BookingRepository) *BookingHandler
 	return NewBookingHandler(service.NewBookingService(repo))
 }
 
+func withAuth(req *http.Request, userID string) *http.Request {
+	ctx := middleware.WithAuthIdentity(req.Context(), domain.AuthIdentity{UserID: userID, TokenID: "tok_test"})
+	return req.WithContext(ctx)
+}
+
 func TestBookingHandlerCreateBookingHold_Success(t *testing.T) {
 	h := newBookingHandlerForTest(&bookingRepoHandlerStub{
 		createHoldFn: func(_ context.Context, _ domain.CreateBookingHoldInput, holdID string, _ time.Time) (domain.BookingHold, error) {
@@ -57,9 +63,10 @@ func TestBookingHandlerCreateBookingHold_Success(t *testing.T) {
 		},
 	})
 
-	body := map[string]any{"userId": "usr_1", "showtimeId": "st_1", "seatNumbers": []string{"A01"}}
+	body := map[string]any{"showtimeId": "st_1", "seatNumbers": []string{"A01"}}
 	payload, _ := json.Marshal(body)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/bookings/holds", bytes.NewReader(payload))
+	req = withAuth(req, "usr_1")
 	rec := httptest.NewRecorder()
 
 	h.CreateBookingHold(rec, req)
@@ -76,8 +83,9 @@ func TestBookingHandlerCreateBookingHold_SeatUnavailable(t *testing.T) {
 		},
 	})
 
-	payload := []byte(`{"userId":"usr_1","showtimeId":"st_1","seatNumbers":["A01"]}`)
+	payload := []byte(`{"showtimeId":"st_1","seatNumbers":["A01"]}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/bookings/holds", bytes.NewReader(payload))
+	req = withAuth(req, "usr_1")
 	rec := httptest.NewRecorder()
 
 	h.CreateBookingHold(rec, req)
@@ -93,8 +101,9 @@ func TestBookingHandlerCheckoutBookingHold_Success(t *testing.T) {
 		},
 	})
 
-	payload := []byte(`{"holdId":"hold_1","userId":"usr_1"}`)
+	payload := []byte(`{"holdId":"hold_1"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/bookings/checkout", bytes.NewReader(payload))
+	req = withAuth(req, "usr_1")
 	rec := httptest.NewRecorder()
 
 	h.CheckoutBookingHold(rec, req)
@@ -103,14 +112,14 @@ func TestBookingHandlerCheckoutBookingHold_Success(t *testing.T) {
 	}
 }
 
-func TestBookingHandlerGetUserBookings_RequiresUserID(t *testing.T) {
+func TestBookingHandlerGetUserBookings_RequiresAuth(t *testing.T) {
 	h := newBookingHandlerForTest(&bookingRepoHandlerStub{})
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/bookings", nil)
 	rec := httptest.NewRecorder()
 
 	h.GetUserBookings(rec, req)
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d", rec.Code)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", rec.Code)
 	}
 }
 
@@ -120,7 +129,8 @@ func TestBookingHandlerGetUserBookings_Success(t *testing.T) {
 			return []domain.UserBooking{{UserID: userID}}, nil
 		},
 	})
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/bookings?userId=usr_1", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/bookings", nil)
+	req = withAuth(req, "usr_1")
 	rec := httptest.NewRecorder()
 
 	h.GetUserBookings(rec, req)
@@ -136,7 +146,8 @@ func TestBookingHandlerCancelBooking_NotFound(t *testing.T) {
 		},
 	})
 
-	req := httptest.NewRequest(http.MethodDelete, "/api/v1/bookings?bookingId=bok_1&userId=usr_1", nil)
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/bookings?bookingId=bok_1", nil)
+	req = withAuth(req, "usr_1")
 	rec := httptest.NewRecorder()
 
 	h.CancelBooking(rec, req)
@@ -152,7 +163,8 @@ func TestBookingHandlerCancelBooking_InternalError(t *testing.T) {
 		},
 	})
 
-	req := httptest.NewRequest(http.MethodDelete, "/api/v1/bookings?bookingId=bok_1&userId=usr_1", nil)
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/bookings?bookingId=bok_1", nil)
+	req = withAuth(req, "usr_1")
 	rec := httptest.NewRecorder()
 
 	h.CancelBooking(rec, req)
@@ -171,7 +183,8 @@ func TestBookingHandlerCancelBooking_QueryBookingID_Success(t *testing.T) {
 		},
 	})
 
-	req := httptest.NewRequest(http.MethodDelete, "/api/v1/bookings?bookingId=bok_1&userId=usr_1", nil)
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/bookings?bookingId=bok_1", nil)
+	req = withAuth(req, "usr_1")
 	rec := httptest.NewRecorder()
 
 	h.CancelBooking(rec, req)
