@@ -155,6 +155,17 @@ func ensureSchema(ctx context.Context, db *sql.DB) error {
 	);
 	`
 
+	createAuthSessionsTableQuery := `
+	CREATE TABLE IF NOT EXISTS auth_sessions (
+		id TEXT PRIMARY KEY,
+		user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		token_id TEXT NOT NULL UNIQUE,
+		expires_at TIMESTAMPTZ NOT NULL,
+		revoked_at TIMESTAMPTZ,
+		created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+	);
+	`
+
 	if _, err := db.ExecContext(ctx, createUsersTableQuery); err != nil {
 		return err
 	}
@@ -184,6 +195,10 @@ func ensureSchema(ctx context.Context, db *sql.DB) error {
 	}
 
 	if _, err := db.ExecContext(ctx, createBookingsTableQuery); err != nil {
+		return err
+	}
+
+	if _, err := db.ExecContext(ctx, createAuthSessionsTableQuery); err != nil {
 		return err
 	}
 

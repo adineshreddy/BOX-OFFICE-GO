@@ -136,3 +136,89 @@ func (r *UserRepository) UpdateLastLogin(ctx context.Context, userID string, log
 
 	return nil
 }
+
+func (r *UserRepository) CreateSession(ctx context.Context, session domain.AuthSession) error {
+	query := `
+	INSERT INTO auth_sessions (
+		id,
+		user_id,
+		token_id,
+		expires_at,
+		revoked_at,
+		created_at
+	)
+	VALUES ($1, $2, $3, $4, $5, $6)
+	`
+
+	_, err := r.db.ExecContext(
+		ctx,
+		query,
+		session.ID,
+		session.UserID,
+		session.TokenID,
+		session.ExpiresAt,
+		session.RevokedAt,
+		session.CreatedAt,
+	)
+	return err
+}
+
+func (r *UserRepository) GetSessionByTokenID(ctx context.Context, tokenID string) (domain.AuthSession, error) {
+	query := `
+	SELECT
+		id,
+		user_id,
+		token_id,
+		expires_at,
+		revoked_at,
+		created_at
+	FROM auth_sessions
+	WHERE token_id = $1
+	`
+
+	var session domain.AuthSession
+	var revokedAt sql.NullTime
+	err := r.db.QueryRowContext(ctx, query, strings.TrimSpace(tokenID)).Scan(
+		&session.ID,
+		&session.UserID,
+		&session.TokenID,
+		&session.ExpiresAt,
+		&revokedAt,
+		&session.CreatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return domain.AuthSession{}, repository.ErrSessionNotFound
+		}
+		return domain.AuthSession{}, err
+	}
+
+	if revokedAt.Valid {
+		session.RevokedAt = &revokedAt.Time
+	}
+
+	return session, nil
+}
+
+func (r *UserRepository) RevokeSessionByTokenID(ctx context.Context, tokenID string, revokedAt time.Time) error {
+	query := `
+	UPDATE auth_sessions
+	SET revoked_at = COALESCE(revoked_at, $2)
+	WHERE token_id = $1
+	`
+
+	result, err := r.db.ExecContext(ctx, query, strings.TrimSpace(tokenID), revokedAt)
+	if err != nil {
+		return err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rowsAffected == 0 {
+		return repository.ErrSessionNotFound
+	}
+
+	return nil
+}

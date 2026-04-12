@@ -6,7 +6,9 @@ import (
 	"net/http"
 
 	"box-office-go/backend/internal/domain"
+	"box-office-go/backend/internal/http/middleware"
 	"box-office-go/backend/internal/http/response"
+	"box-office-go/backend/internal/repository"
 	"box-office-go/backend/internal/service"
 )
 
@@ -81,7 +83,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	loggedInUser, validationErrors, err := h.authService.Login(r.Context(), input)
+	loginResult, validationErrors, err := h.authService.Login(r.Context(), input)
 	if err != nil {
 		response.Error(w, http.StatusInternalServerError, "failed to login", nil)
 		return
@@ -93,18 +95,47 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response.JSON(w, http.StatusOK, map[string]any{
-		"message": "login successful",
+		"message":     "login successful",
+		"accessToken": loginResult.AccessToken,
+		"tokenType":   loginResult.TokenType,
+		"expiresAt":   loginResult.ExpiresAt,
 		"user": map[string]any{
-			"id":          loggedInUser.ID,
-			"name":        loggedInUser.Name,
-			"phone":       loggedInUser.Phone,
-			"email":       loggedInUser.Email,
-			"isAdmin":     loggedInUser.IsAdmin,
-			"isActive":    loggedInUser.IsActive,
-			"isVerified":  loggedInUser.IsVerified,
-			"lastLoginAt": loggedInUser.LastLoginAt,
-			"createdAt":   loggedInUser.CreatedAt,
-			"updatedAt":   loggedInUser.UpdatedAt,
+			"id":          loginResult.User.ID,
+			"name":        loginResult.User.Name,
+			"phone":       loginResult.User.Phone,
+			"email":       loginResult.User.Email,
+			"isAdmin":     loginResult.User.IsAdmin,
+			"isActive":    loginResult.User.IsActive,
+			"isVerified":  loginResult.User.IsVerified,
+			"lastLoginAt": loginResult.User.LastLoginAt,
+			"createdAt":   loginResult.User.CreatedAt,
+			"updatedAt":   loginResult.User.UpdatedAt,
 		},
+	})
+}
+
+func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		response.Error(w, http.StatusMethodNotAllowed, "method not allowed", nil)
+		return
+	}
+
+	identity, ok := middleware.AuthIdentityFromContext(r.Context())
+	if !ok || identity.TokenID == "" {
+		response.Error(w, http.StatusUnauthorized, "unauthorized", nil)
+		return
+	}
+
+	if err := h.authService.Logout(r.Context(), identity.TokenID); err != nil {
+		if errors.Is(err, repository.ErrSessionNotFound) || errors.Is(err, service.ErrInvalidAuthToken) {
+			response.Error(w, http.StatusUnauthorized, "unauthorized", nil)
+			return
+		}
+		response.Error(w, http.StatusInternalServerError, "failed to logout", nil)
+		return
+	}
+
+	response.JSON(w, http.StatusOK, map[string]string{
+		"message": "logout successful",
 	})
 }

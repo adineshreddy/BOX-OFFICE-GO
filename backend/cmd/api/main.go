@@ -32,7 +32,11 @@ func main() {
 	movieRepository := postgres.NewMovieRepository(db)
 	bookingRepository := postgres.NewBookingRepository(db)
 
-	authService := service.NewAuthService(userRepository)
+	authService := service.NewAuthServiceWithConfig(
+		userRepository,
+		cfg.JWTSecret,
+		time.Duration(cfg.AuthTokenTTLMinutes)*time.Minute,
+	)
 	movieService := service.NewMovieService(movieRepository)
 	bookingService := service.NewBookingService(bookingRepository)
 

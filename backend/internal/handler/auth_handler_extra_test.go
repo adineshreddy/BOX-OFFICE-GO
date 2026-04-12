@@ -75,3 +75,25 @@ func TestAuthHandlerLogin_InvalidCredentials(t *testing.T) {
 		t.Fatalf("expected 400, got %d", rec.Code)
 	}
 }
+
+func TestAuthHandlerLogout_MethodNotAllowed(t *testing.T) {
+	h := NewAuthHandler(service.NewAuthService(memory.NewUserRepository()))
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/logout", nil)
+	rec := httptest.NewRecorder()
+
+	h.Logout(rec, req)
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("expected 405, got %d", rec.Code)
+	}
+}
+
+func TestAuthHandlerLogout_UnauthorizedWithoutContext(t *testing.T) {
+	h := NewAuthHandler(service.NewAuthService(memory.NewUserRepository()))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout", nil)
+	rec := httptest.NewRecorder()
+
+	h.Logout(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", rec.Code)
+	}
+}
