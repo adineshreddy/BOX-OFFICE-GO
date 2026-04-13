@@ -12,17 +12,24 @@ import (
 
 	"box-office-go/backend/internal/domain"
 	"box-office-go/backend/internal/http/middleware"
+	"box-office-go/backend/internal/payment"
 	"box-office-go/backend/internal/repository"
 	"box-office-go/backend/internal/service"
 )
 
+// ── repo stub ────────────────────────────────────────────────────────
+
 type bookingRepoHandlerStub struct {
-	cleanupExpiredFn      func(ctx context.Context) error
-	createHoldFn          func(ctx context.Context, input domain.CreateBookingHoldInput, holdID string, holdExpiresAt time.Time) (domain.BookingHold, error)
-	checkoutHoldFn        func(ctx context.Context, holdID string, userID string, bookingID string) (domain.BookingCheckoutResult, error)
-	listByUserIDFn        func(ctx context.Context, userID string) ([]domain.UserBooking, error)
-	cancelBookingFn       func(ctx context.Context, bookingID string, userID string) error
-	getBookingForTicketFn func(ctx context.Context, bookingID string) (domain.TicketData, error)
+	cleanupExpiredFn          func(ctx context.Context) error
+	createHoldFn              func(ctx context.Context, input domain.CreateBookingHoldInput, holdID string, holdExpiresAt time.Time) (domain.BookingHold, error)
+	checkoutHoldFn            func(ctx context.Context, holdID string, userID string, bookingID string) (domain.BookingCheckoutResult, error)
+	listByUserIDFn            func(ctx context.Context, userID string) ([]domain.UserBooking, error)
+	cancelBookingFn           func(ctx context.Context, bookingID string, userID string) error
+	getBookingForTicketFn     func(ctx context.Context, bookingID string) (domain.TicketData, error)
+	createPaymentTxnFn        func(ctx context.Context, txn domain.PaymentTransaction) error
+	getPaymentByIdempotencyFn func(ctx context.Context, key string) (*domain.PaymentTransaction, error)
+	updatePaymentStatusFn     func(ctx context.Context, txnID string, status string, gatewayTxnID string, failureReason string) error
+	getHoldDetailsFn          func(ctx context.Context, holdID string, userID string) (domain.BookingHold, error)
 }
 
 func (s *bookingRepoHandlerStub) CleanupExpiredHolds(ctx context.Context) error {
@@ -37,6 +44,9 @@ func (s *bookingRepoHandlerStub) CreateHold(ctx context.Context, input domain.Cr
 }
 
 func (s *bookingRepoHandlerStub) CheckoutHold(ctx context.Context, holdID string, userID string, bookingID string) (domain.BookingCheckoutResult, error) {
+	if s.checkoutHoldFn == nil {
+		return domain.BookingCheckoutResult{BookingID: bookingID, HoldID: holdID, UserID: userID}, nil
+	}
 	return s.checkoutHoldFn(ctx, holdID, userID, bookingID)
 }
 
@@ -55,8 +65,62 @@ func (s *bookingRepoHandlerStub) GetBookingForTicket(ctx context.Context, bookin
 	return s.getBookingForTicketFn(ctx, bookingID)
 }
 
+func (s *bookingRepoHandlerStub) CreatePaymentTransaction(ctx context.Context, txn domain.PaymentTransaction) error {
+	if s.createPaymentTxnFn == nil {
+		return nil
+	}
+	return s.createPaymentTxnFn(ctx, txn)
+}
+
+func (s *bookingRepoHandlerStub) GetPaymentByIdempotencyKey(ctx context.Context, key string) (*domain.PaymentTransaction, error) {
+	if s.getPaymentByIdempotencyFn == nil {
+		return nil, nil
+	}
+	return s.getPaymentByIdempotencyFn(ctx, key)
+}
+
+func (s *bookingRepoHandlerStub) UpdatePaymentStatus(ctx context.Context, txnID string, status string, gatewayTxnID string, failureReason string) error {
+	if s.updatePaymentStatusFn == nil {
+		return nil
+	}
+	return s.updatePaymentStatusFn(ctx, txnID, status, gatewayTxnID, failureReason)
+}
+
+func (s *bookingRepoHandlerStub) GetHoldDetails(ctx context.Context, holdID string, userID string) (domain.BookingHold, error) {
+	if s.getHoldDetailsFn == nil {
+		return domain.BookingHold{
+			HoldID:        holdID,
+			UserID:        userID,
+			ShowtimeID:    "st_1",
+			SeatNumbers:   []string{"A01"},
+			Status:        domain.BookingHoldStatusHeld,
+			HoldExpiresAt: time.Now().UTC().Add(5 * time.Minute),
+			TotalAmount:   12.50,
+			CreatedAt:     time.Now().UTC(),
+		}, nil
+	}
+	return s.getHoldDetailsFn(ctx, holdID, userID)
+}
+
+// ── gateway stub ─────────────────────────────────────────────────────
+
+type handlerGatewayStub struct {
+	chargeFn func(ctx context.Context, req payment.ChargeRequest) (payment.ChargeResponse, error)
+}
+
+func (g *handlerGatewayStub) Charge(ctx context.Context, req payment.ChargeRequest) (payment.ChargeResponse, error) {
+	if g.chargeFn == nil {
+		return payment.ChargeResponse{GatewayTxnID: "gw_ok", Status: "SUCCESS"}, nil
+	}
+	return g.chargeFn(ctx, req)
+}
+
 func newBookingHandlerForTest(repo repository.BookingRepository) *BookingHandler {
-	return NewBookingHandler(service.NewBookingService(repo))
+	return NewBookingHandler(service.NewBookingService(repo, &handlerGatewayStub{}))
+}
+
+func newBookingHandlerWithGateway(repo repository.BookingRepository, gw payment.Gateway) *BookingHandler {
+	return NewBookingHandler(service.NewBookingService(repo, gw))
 }
 
 func withAuth(req *http.Request, userID string) *http.Request {
@@ -105,11 +169,11 @@ func TestBookingHandlerCreateBookingHold_SeatUnavailable(t *testing.T) {
 func TestBookingHandlerCheckoutBookingHold_Success(t *testing.T) {
 	h := newBookingHandlerForTest(&bookingRepoHandlerStub{
 		checkoutHoldFn: func(_ context.Context, holdID string, userID string, bookingID string) (domain.BookingCheckoutResult, error) {
-			return domain.BookingCheckoutResult{HoldID: holdID, UserID: userID, BookingID: bookingID}, nil
+			return domain.BookingCheckoutResult{HoldID: holdID, UserID: userID, BookingID: bookingID, TotalAmount: 12.50}, nil
 		},
 	})
 
-	payload := []byte(`{"holdId":"hold_1"}`)
+	payload := []byte(`{"holdId":"hold_1","paymentMethod":"card","idempotencyKey":"key_1"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/bookings/checkout", bytes.NewReader(payload))
 	req = withAuth(req, "usr_1")
 	rec := httptest.NewRecorder()
@@ -300,5 +364,73 @@ func TestDownloadTicket_Success(t *testing.T) {
 	}
 	if body[:4] != "%PDF" {
 		t.Fatal("expected PDF magic header in response")
+	}
+}
+
+// ── Payment handler tests ────────────────────────────────────────────
+
+func TestCheckoutHandler_PaymentDeclined_Returns402(t *testing.T) {
+	gw := &handlerGatewayStub{
+		chargeFn: func(_ context.Context, _ payment.ChargeRequest) (payment.ChargeResponse, error) {
+			return payment.ChargeResponse{Status: "FAILED", Reason: "card declined"}, payment.ErrPaymentDeclined
+		},
+	}
+	h := newBookingHandlerWithGateway(&bookingRepoHandlerStub{}, gw)
+
+	payload := []byte(`{"holdId":"hold_1","paymentMethod":"card_decline","idempotencyKey":"key_dec"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/bookings/checkout", bytes.NewReader(payload))
+	req = withAuth(req, "usr_1")
+	rec := httptest.NewRecorder()
+
+	h.CheckoutBookingHold(rec, req)
+	if rec.Code != http.StatusPaymentRequired {
+		t.Fatalf("expected 402, got %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestCheckoutHandler_GatewayTimeout_Returns502(t *testing.T) {
+	gw := &handlerGatewayStub{
+		chargeFn: func(_ context.Context, _ payment.ChargeRequest) (payment.ChargeResponse, error) {
+			return payment.ChargeResponse{}, payment.ErrGatewayTimeout
+		},
+	}
+	h := newBookingHandlerWithGateway(&bookingRepoHandlerStub{}, gw)
+
+	payload := []byte(`{"holdId":"hold_1","paymentMethod":"card_timeout","idempotencyKey":"key_to"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/bookings/checkout", bytes.NewReader(payload))
+	req = withAuth(req, "usr_1")
+	rec := httptest.NewRecorder()
+
+	h.CheckoutBookingHold(rec, req)
+	if rec.Code != http.StatusBadGateway {
+		t.Fatalf("expected 502, got %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestCheckoutHandler_MissingPaymentMethod_Returns400(t *testing.T) {
+	h := newBookingHandlerForTest(&bookingRepoHandlerStub{})
+
+	payload := []byte(`{"holdId":"hold_1","idempotencyKey":"key_1"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/bookings/checkout", bytes.NewReader(payload))
+	req = withAuth(req, "usr_1")
+	rec := httptest.NewRecorder()
+
+	h.CheckoutBookingHold(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestCheckoutHandler_MissingIdempotencyKey_Returns400(t *testing.T) {
+	h := newBookingHandlerForTest(&bookingRepoHandlerStub{})
+
+	payload := []byte(`{"holdId":"hold_1","paymentMethod":"card"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/bookings/checkout", bytes.NewReader(payload))
+	req = withAuth(req, "usr_1")
+	rec := httptest.NewRecorder()
+
+	h.CheckoutBookingHold(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d body=%s", rec.Code, rec.Body.String())
 	}
 }

@@ -11,6 +11,7 @@ import (
 	"box-office-go/backend/internal/database"
 	"box-office-go/backend/internal/http/middleware"
 	httpRouter "box-office-go/backend/internal/http/router"
+	"box-office-go/backend/internal/payment"
 	"box-office-go/backend/internal/repository/postgres"
 	"box-office-go/backend/internal/service"
 )
@@ -38,7 +39,8 @@ func main() {
 		time.Duration(cfg.AuthTokenTTLMinutes)*time.Minute,
 	)
 	movieService := service.NewMovieService(movieRepository)
-	bookingService := service.NewBookingService(bookingRepository)
+	paymentGateway := payment.NewMockGateway()
+	bookingService := service.NewBookingService(bookingRepository, paymentGateway)
 
 	go func() {
 		ticker := time.NewTicker(time.Minute)

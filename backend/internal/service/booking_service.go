@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"box-office-go/backend/internal/domain"
+	"box-office-go/backend/internal/payment"
 	"box-office-go/backend/internal/repository"
 
 	"github.com/jung-kurt/gofpdf/v2"
@@ -17,10 +18,14 @@ const defaultHoldDuration = 7 * time.Minute
 
 type BookingService struct {
 	bookingRepository repository.BookingRepository
+	paymentGateway    payment.Gateway
 }
 
-func NewBookingService(bookingRepository repository.BookingRepository) *BookingService {
-	return &BookingService{bookingRepository: bookingRepository}
+func NewBookingService(bookingRepository repository.BookingRepository, paymentGateway payment.Gateway) *BookingService {
+	return &BookingService{
+		bookingRepository: bookingRepository,
+		paymentGateway:    paymentGateway,
+	}
 }
 
 func (s *BookingService) ReleaseExpiredHolds(ctx context.Context) error {
@@ -63,12 +68,108 @@ func (s *BookingService) CheckoutBookingHold(ctx context.Context, input domain.C
 		return domain.BookingCheckoutResult{}, fmt.Errorf("userId is required")
 	}
 
+	paymentMethod := strings.TrimSpace(input.PaymentMethod)
+	if paymentMethod == "" {
+		return domain.BookingCheckoutResult{}, fmt.Errorf("paymentMethod is required")
+	}
+
+	idempotencyKey := strings.TrimSpace(input.IdempotencyKey)
+	if idempotencyKey == "" {
+		return domain.BookingCheckoutResult{}, fmt.Errorf("idempotencyKey is required")
+	}
+
+	// ── 1. Idempotency check ─────────────────────────────────────────
+	existing, err := s.bookingRepository.GetPaymentByIdempotencyKey(ctx, idempotencyKey)
+	if err != nil {
+		return domain.BookingCheckoutResult{}, fmt.Errorf("idempotency lookup: %w", err)
+	}
+	if existing != nil {
+		if existing.Status == domain.PaymentStatusSuccess {
+			// Payment already succeeded — return the confirmed booking.
+			return domain.BookingCheckoutResult{
+				HoldID:        existing.HoldID,
+				UserID:        existing.UserID,
+				TotalAmount:   existing.Amount,
+				Status:        domain.BookingHoldStatusConfirmed,
+				TransactionID: existing.ID,
+			}, nil
+		}
+		// Previous attempt failed — allow retry with a fresh transaction below.
+	}
+
+	// ── 2. Cleanup expired holds ─────────────────────────────────────
 	if err := s.bookingRepository.CleanupExpiredHolds(ctx); err != nil {
 		return domain.BookingCheckoutResult{}, fmt.Errorf("cleanup expired holds: %w", err)
 	}
 
+	// ── 3. Get hold details (validates hold exists, belongs to user, is HELD and not expired) ──
+	hold, err := s.bookingRepository.GetHoldDetails(ctx, holdID, userID)
+	if err != nil {
+		return domain.BookingCheckoutResult{}, err
+	}
+
+	if hold.Status != domain.BookingHoldStatusHeld {
+		if hold.Status == domain.BookingHoldStatusConfirmed {
+			return domain.BookingCheckoutResult{}, repository.ErrHoldFinalized
+		}
+		return domain.BookingCheckoutResult{}, repository.ErrHoldExpired
+	}
+	if hold.HoldExpiresAt.Before(time.Now().UTC()) {
+		return domain.BookingCheckoutResult{}, repository.ErrHoldExpired
+	}
+
+	// ── 4. Create PENDING payment transaction ────────────────────────
+	txnID := fmt.Sprintf("txn_%d", time.Now().UnixNano())
+	now := time.Now().UTC()
+	pendingTxn := domain.PaymentTransaction{
+		ID:             txnID,
+		HoldID:         holdID,
+		UserID:         userID,
+		Amount:         hold.TotalAmount,
+		PaymentMethod:  paymentMethod,
+		Status:         domain.PaymentStatusPending,
+		IdempotencyKey: idempotencyKey,
+		CreatedAt:      now,
+		UpdatedAt:      now,
+	}
+	if err := s.bookingRepository.CreatePaymentTransaction(ctx, pendingTxn); err != nil {
+		return domain.BookingCheckoutResult{}, fmt.Errorf("create payment transaction: %w", err)
+	}
+
+	// ── 5. Charge via gateway ────────────────────────────────────────
+	chargeResp, chargeErr := s.paymentGateway.Charge(ctx, payment.ChargeRequest{
+		Amount:        hold.TotalAmount,
+		PaymentMethod: paymentMethod,
+		HoldID:        holdID,
+		UserID:        userID,
+	})
+
+	// ── 6. Handle gateway timeout / unexpected error ─────────────────
+	if chargeErr != nil {
+		failReason := chargeErr.Error()
+		_ = s.bookingRepository.UpdatePaymentStatus(ctx, txnID, domain.PaymentStatusFailed, "", failReason)
+		return domain.BookingCheckoutResult{}, chargeErr
+	}
+
+	// ── 7. Handle decline ────────────────────────────────────────────
+	if chargeResp.Status != "SUCCESS" {
+		_ = s.bookingRepository.UpdatePaymentStatus(ctx, txnID, domain.PaymentStatusFailed, chargeResp.GatewayTxnID, chargeResp.Reason)
+		return domain.BookingCheckoutResult{}, payment.ErrPaymentDeclined
+	}
+
+	// ── 8. Payment succeeded — update txn and confirm booking ────────
+	if err := s.bookingRepository.UpdatePaymentStatus(ctx, txnID, domain.PaymentStatusSuccess, chargeResp.GatewayTxnID, ""); err != nil {
+		return domain.BookingCheckoutResult{}, fmt.Errorf("update payment status: %w", err)
+	}
+
 	bookingID := fmt.Sprintf("bok_%d", time.Now().UnixNano())
-	return s.bookingRepository.CheckoutHold(ctx, holdID, userID, bookingID)
+	result, err := s.bookingRepository.CheckoutHold(ctx, holdID, userID, bookingID)
+	if err != nil {
+		return domain.BookingCheckoutResult{}, err
+	}
+
+	result.TransactionID = txnID
+	return result, nil
 }
 
 func normalizeHoldInput(input domain.CreateBookingHoldInput) (domain.CreateBookingHoldInput, error) {

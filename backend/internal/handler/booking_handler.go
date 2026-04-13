@@ -9,6 +9,7 @@ import (
 	"box-office-go/backend/internal/domain"
 	"box-office-go/backend/internal/http/middleware"
 	"box-office-go/backend/internal/http/response"
+	"box-office-go/backend/internal/payment"
 	"box-office-go/backend/internal/repository"
 	"box-office-go/backend/internal/service"
 )
@@ -108,6 +109,12 @@ func handleBookingError(w http.ResponseWriter, err error) {
 		return
 	case errors.Is(err, repository.ErrHoldFinalized):
 		response.Error(w, http.StatusConflict, "booking hold already finalized", nil)
+		return
+	case errors.Is(err, payment.ErrPaymentDeclined):
+		response.Error(w, http.StatusPaymentRequired, "payment declined", nil)
+		return
+	case errors.Is(err, payment.ErrGatewayTimeout):
+		response.Error(w, http.StatusBadGateway, "payment gateway unavailable, please retry", nil)
 		return
 	}
 

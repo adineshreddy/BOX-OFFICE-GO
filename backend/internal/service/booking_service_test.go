@@ -8,16 +8,23 @@ import (
 	"time"
 
 	"box-office-go/backend/internal/domain"
+	"box-office-go/backend/internal/payment"
 	"box-office-go/backend/internal/repository"
 )
 
+// ── repo stub ────────────────────────────────────────────────────────
+
 type bookingRepoStub struct {
-	cleanupExpiredFn      func(ctx context.Context) error
-	createHoldFn          func(ctx context.Context, input domain.CreateBookingHoldInput, holdID string, holdExpiresAt time.Time) (domain.BookingHold, error)
-	checkoutHoldFn        func(ctx context.Context, holdID string, userID string, bookingID string) (domain.BookingCheckoutResult, error)
-	listByUserIDFn        func(ctx context.Context, userID string) ([]domain.UserBooking, error)
-	cancelBookingFn       func(ctx context.Context, bookingID string, userID string) error
-	getBookingForTicketFn func(ctx context.Context, bookingID string) (domain.TicketData, error)
+	cleanupExpiredFn          func(ctx context.Context) error
+	createHoldFn              func(ctx context.Context, input domain.CreateBookingHoldInput, holdID string, holdExpiresAt time.Time) (domain.BookingHold, error)
+	checkoutHoldFn            func(ctx context.Context, holdID string, userID string, bookingID string) (domain.BookingCheckoutResult, error)
+	listByUserIDFn            func(ctx context.Context, userID string) ([]domain.UserBooking, error)
+	cancelBookingFn           func(ctx context.Context, bookingID string, userID string) error
+	getBookingForTicketFn     func(ctx context.Context, bookingID string) (domain.TicketData, error)
+	createPaymentTxnFn        func(ctx context.Context, txn domain.PaymentTransaction) error
+	getPaymentByIdempotencyFn func(ctx context.Context, key string) (*domain.PaymentTransaction, error)
+	updatePaymentStatusFn     func(ctx context.Context, txnID string, status string, gatewayTxnID string, failureReason string) error
+	getHoldDetailsFn          func(ctx context.Context, holdID string, userID string) (domain.BookingHold, error)
 }
 
 func (s *bookingRepoStub) CleanupExpiredHolds(ctx context.Context) error {
@@ -30,6 +37,9 @@ func (s *bookingRepoStub) CreateHold(ctx context.Context, input domain.CreateBoo
 	return s.createHoldFn(ctx, input, holdID, holdExpiresAt)
 }
 func (s *bookingRepoStub) CheckoutHold(ctx context.Context, holdID string, userID string, bookingID string) (domain.BookingCheckoutResult, error) {
+	if s.checkoutHoldFn == nil {
+		return domain.BookingCheckoutResult{BookingID: bookingID, HoldID: holdID, UserID: userID}, nil
+	}
 	return s.checkoutHoldFn(ctx, holdID, userID, bookingID)
 }
 func (s *bookingRepoStub) ListByUserID(ctx context.Context, userID string) ([]domain.UserBooking, error) {
@@ -44,16 +54,73 @@ func (s *bookingRepoStub) GetBookingForTicket(ctx context.Context, bookingID str
 	}
 	return s.getBookingForTicketFn(ctx, bookingID)
 }
+func (s *bookingRepoStub) CreatePaymentTransaction(ctx context.Context, txn domain.PaymentTransaction) error {
+	if s.createPaymentTxnFn == nil {
+		return nil
+	}
+	return s.createPaymentTxnFn(ctx, txn)
+}
+func (s *bookingRepoStub) GetPaymentByIdempotencyKey(ctx context.Context, key string) (*domain.PaymentTransaction, error) {
+	if s.getPaymentByIdempotencyFn == nil {
+		return nil, nil
+	}
+	return s.getPaymentByIdempotencyFn(ctx, key)
+}
+func (s *bookingRepoStub) UpdatePaymentStatus(ctx context.Context, txnID string, status string, gatewayTxnID string, failureReason string) error {
+	if s.updatePaymentStatusFn == nil {
+		return nil
+	}
+	return s.updatePaymentStatusFn(ctx, txnID, status, gatewayTxnID, failureReason)
+}
+func (s *bookingRepoStub) GetHoldDetails(ctx context.Context, holdID string, userID string) (domain.BookingHold, error) {
+	if s.getHoldDetailsFn == nil {
+		return domain.BookingHold{
+			HoldID:        holdID,
+			UserID:        userID,
+			ShowtimeID:    "st_1",
+			SeatNumbers:   []string{"A01"},
+			Status:        domain.BookingHoldStatusHeld,
+			HoldExpiresAt: time.Now().UTC().Add(5 * time.Minute),
+			TotalAmount:   12.50,
+			CreatedAt:     time.Now().UTC(),
+		}, nil
+	}
+	return s.getHoldDetailsFn(ctx, holdID, userID)
+}
+
+// ── gateway stub ─────────────────────────────────────────────────────
+
+type gatewayStub struct {
+	chargeFn func(ctx context.Context, req payment.ChargeRequest) (payment.ChargeResponse, error)
+}
+
+func (g *gatewayStub) Charge(ctx context.Context, req payment.ChargeRequest) (payment.ChargeResponse, error) {
+	if g.chargeFn == nil {
+		return payment.ChargeResponse{GatewayTxnID: "gw_ok", Status: "SUCCESS"}, nil
+	}
+	return g.chargeFn(ctx, req)
+}
+
+// helper to build a service with default mock gateway
+func newTestService(repo *bookingRepoStub) *BookingService {
+	return NewBookingService(repo, &gatewayStub{})
+}
+
+func newTestServiceWithGateway(repo *bookingRepoStub, gw payment.Gateway) *BookingService {
+	return NewBookingService(repo, gw)
+}
+
+// ── existing tests (updated for new constructor) ─────────────────────
 
 func TestNewBookingService(t *testing.T) {
-	svc := NewBookingService(&bookingRepoStub{})
+	svc := newTestService(&bookingRepoStub{})
 	if svc == nil {
 		t.Fatal("expected service instance, got nil")
 	}
 }
 
 func TestBookingServiceReleaseExpiredHolds_Error(t *testing.T) {
-	svc := NewBookingService(&bookingRepoStub{
+	svc := newTestService(&bookingRepoStub{
 		cleanupExpiredFn: func(_ context.Context) error { return errors.New("db") },
 	})
 	if err := svc.ReleaseExpiredHolds(context.Background()); err == nil {
@@ -62,14 +129,14 @@ func TestBookingServiceReleaseExpiredHolds_Error(t *testing.T) {
 }
 
 func TestBookingServiceCreateBookingHold_InvalidInput(t *testing.T) {
-	svc := NewBookingService(&bookingRepoStub{})
+	svc := newTestService(&bookingRepoStub{})
 	if _, err := svc.CreateBookingHold(context.Background(), domain.CreateBookingHoldInput{}); err == nil {
 		t.Fatal("expected validation error")
 	}
 }
 
 func TestBookingServiceCreateBookingHold_CleanupError(t *testing.T) {
-	svc := NewBookingService(&bookingRepoStub{
+	svc := newTestService(&bookingRepoStub{
 		cleanupExpiredFn: func(_ context.Context) error { return errors.New("cleanup failed") },
 	})
 
@@ -95,7 +162,7 @@ func TestBookingServiceCreateBookingHold_Success(t *testing.T) {
 			return domain.BookingHold{HoldID: holdID}, nil
 		},
 	}
-	svc := NewBookingService(repo)
+	svc := newTestService(repo)
 
 	hold, err := svc.CreateBookingHold(context.Background(), domain.CreateBookingHoldInput{
 		UserID:      "usr_1",
@@ -108,12 +175,38 @@ func TestBookingServiceCreateBookingHold_Success(t *testing.T) {
 }
 
 func TestBookingServiceCheckoutBookingHold_Validation(t *testing.T) {
-	svc := NewBookingService(&bookingRepoStub{})
-	if _, err := svc.CheckoutBookingHold(context.Background(), domain.ConfirmBookingInput{UserID: "usr_1"}); err == nil {
-		t.Fatal("expected holdId validation error")
+	svc := newTestService(&bookingRepoStub{})
+
+	// missing holdId
+	_, err := svc.CheckoutBookingHold(context.Background(), domain.ConfirmBookingInput{
+		UserID: "usr_1", PaymentMethod: "card", IdempotencyKey: "key_1",
+	})
+	if err == nil || !strings.Contains(err.Error(), "holdId is required") {
+		t.Fatalf("expected holdId validation error, got %v", err)
 	}
-	if _, err := svc.CheckoutBookingHold(context.Background(), domain.ConfirmBookingInput{HoldID: "hold_1"}); err == nil {
-		t.Fatal("expected userId validation error")
+
+	// missing userId
+	_, err = svc.CheckoutBookingHold(context.Background(), domain.ConfirmBookingInput{
+		HoldID: "hold_1", PaymentMethod: "card", IdempotencyKey: "key_1",
+	})
+	if err == nil || !strings.Contains(err.Error(), "userId is required") {
+		t.Fatalf("expected userId validation error, got %v", err)
+	}
+
+	// missing paymentMethod
+	_, err = svc.CheckoutBookingHold(context.Background(), domain.ConfirmBookingInput{
+		HoldID: "hold_1", UserID: "usr_1", IdempotencyKey: "key_1",
+	})
+	if err == nil || !strings.Contains(err.Error(), "paymentMethod is required") {
+		t.Fatalf("expected paymentMethod validation error, got %v", err)
+	}
+
+	// missing idempotencyKey
+	_, err = svc.CheckoutBookingHold(context.Background(), domain.ConfirmBookingInput{
+		HoldID: "hold_1", UserID: "usr_1", PaymentMethod: "card",
+	})
+	if err == nil || !strings.Contains(err.Error(), "idempotencyKey is required") {
+		t.Fatalf("expected idempotencyKey validation error, got %v", err)
 	}
 }
 
@@ -123,19 +216,27 @@ func TestBookingServiceCheckoutBookingHold_Success(t *testing.T) {
 			if bookingID == "" {
 				t.Fatal("expected generated bookingID")
 			}
-			return domain.BookingCheckoutResult{BookingID: bookingID, HoldID: holdID, UserID: userID}, nil
+			return domain.BookingCheckoutResult{BookingID: bookingID, HoldID: holdID, UserID: userID, TotalAmount: 12.50}, nil
 		},
 	}
-	svc := NewBookingService(repo)
+	svc := newTestService(repo)
 
-	result, err := svc.CheckoutBookingHold(context.Background(), domain.ConfirmBookingInput{HoldID: "hold_1", UserID: "usr_1"})
-	if err != nil || result.BookingID == "" {
-		t.Fatalf("unexpected result=%+v err=%v", result, err)
+	result, err := svc.CheckoutBookingHold(context.Background(), domain.ConfirmBookingInput{
+		HoldID: "hold_1", UserID: "usr_1", PaymentMethod: "card", IdempotencyKey: "key_1",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error %v", err)
+	}
+	if result.BookingID == "" {
+		t.Fatal("expected bookingID")
+	}
+	if result.TransactionID == "" {
+		t.Fatal("expected transactionID in result")
 	}
 }
 
 func TestBookingServiceGetUserBookings(t *testing.T) {
-	svc := NewBookingService(&bookingRepoStub{
+	svc := newTestService(&bookingRepoStub{
 		listByUserIDFn: func(_ context.Context, userID string) ([]domain.UserBooking, error) {
 			return []domain.UserBooking{{UserID: userID}}, nil
 		},
@@ -149,7 +250,7 @@ func TestBookingServiceGetUserBookings(t *testing.T) {
 
 func TestBookingServiceCancelBooking(t *testing.T) {
 	called := false
-	svc := NewBookingService(&bookingRepoStub{
+	svc := newTestService(&bookingRepoStub{
 		cancelBookingFn: func(_ context.Context, bookingID string, userID string) error {
 			called = true
 			if bookingID != "bok_1" || userID != "usr_1" {
@@ -168,7 +269,7 @@ func TestBookingServiceCancelBooking(t *testing.T) {
 }
 
 func TestBookingServiceGetTicketPDF_EmptyBookingID(t *testing.T) {
-	svc := NewBookingService(&bookingRepoStub{})
+	svc := newTestService(&bookingRepoStub{})
 	_, _, err := svc.GetTicketPDF(context.Background(), "  ", "usr_1")
 	if err == nil || !strings.Contains(err.Error(), "bookingId is required") {
 		t.Fatalf("expected bookingId validation error, got %v", err)
@@ -176,7 +277,7 @@ func TestBookingServiceGetTicketPDF_EmptyBookingID(t *testing.T) {
 }
 
 func TestBookingServiceGetTicketPDF_EmptyUserID(t *testing.T) {
-	svc := NewBookingService(&bookingRepoStub{})
+	svc := newTestService(&bookingRepoStub{})
 	_, _, err := svc.GetTicketPDF(context.Background(), "bok_1", "  ")
 	if err == nil || !strings.Contains(err.Error(), "userId is required") {
 		t.Fatalf("expected userId validation error, got %v", err)
@@ -184,7 +285,7 @@ func TestBookingServiceGetTicketPDF_EmptyUserID(t *testing.T) {
 }
 
 func TestBookingServiceGetTicketPDF_BookingNotFound(t *testing.T) {
-	svc := NewBookingService(&bookingRepoStub{
+	svc := newTestService(&bookingRepoStub{
 		getBookingForTicketFn: func(_ context.Context, _ string) (domain.TicketData, error) {
 			return domain.TicketData{}, repository.ErrBookingNotFound
 		},
@@ -196,7 +297,7 @@ func TestBookingServiceGetTicketPDF_BookingNotFound(t *testing.T) {
 }
 
 func TestBookingServiceGetTicketPDF_NotOwned(t *testing.T) {
-	svc := NewBookingService(&bookingRepoStub{
+	svc := newTestService(&bookingRepoStub{
 		getBookingForTicketFn: func(_ context.Context, _ string) (domain.TicketData, error) {
 			return domain.TicketData{UserID: "usr_other", Status: "CONFIRMED"}, nil
 		},
@@ -208,7 +309,7 @@ func TestBookingServiceGetTicketPDF_NotOwned(t *testing.T) {
 }
 
 func TestBookingServiceGetTicketPDF_NotConfirmed(t *testing.T) {
-	svc := NewBookingService(&bookingRepoStub{
+	svc := newTestService(&bookingRepoStub{
 		getBookingForTicketFn: func(_ context.Context, _ string) (domain.TicketData, error) {
 			return domain.TicketData{UserID: "usr_1", Status: "CANCELLED"}, nil
 		},
@@ -220,7 +321,7 @@ func TestBookingServiceGetTicketPDF_NotConfirmed(t *testing.T) {
 }
 
 func TestBookingServiceGetTicketPDF_Success(t *testing.T) {
-	svc := NewBookingService(&bookingRepoStub{
+	svc := newTestService(&bookingRepoStub{
 		getBookingForTicketFn: func(_ context.Context, bookingID string) (domain.TicketData, error) {
 			return domain.TicketData{
 				BookingID:   bookingID,
@@ -250,8 +351,187 @@ func TestBookingServiceGetTicketPDF_Success(t *testing.T) {
 	if len(pdfBytes) == 0 {
 		t.Fatal("expected non-empty PDF bytes")
 	}
-	// PDF files start with %PDF
 	if !strings.HasPrefix(string(pdfBytes), "%PDF") {
 		t.Fatal("expected PDF magic header")
+	}
+}
+
+// ── Payment integration tests ────────────────────────────────────────
+
+func TestCheckout_PaymentSuccess_ConfirmsBooking(t *testing.T) {
+	var paymentCreated, paymentUpdated bool
+	repo := &bookingRepoStub{
+		createPaymentTxnFn: func(_ context.Context, txn domain.PaymentTransaction) error {
+			paymentCreated = true
+			if txn.Status != domain.PaymentStatusPending {
+				t.Fatalf("expected PENDING status, got %s", txn.Status)
+			}
+			if txn.PaymentMethod != "card" {
+				t.Fatalf("expected payment method card, got %s", txn.PaymentMethod)
+			}
+			return nil
+		},
+		updatePaymentStatusFn: func(_ context.Context, _ string, status string, gatewayTxnID string, _ string) error {
+			paymentUpdated = true
+			if status != domain.PaymentStatusSuccess {
+				t.Fatalf("expected SUCCESS, got %s", status)
+			}
+			if gatewayTxnID == "" {
+				t.Fatal("expected gateway txn ID")
+			}
+			return nil
+		},
+		checkoutHoldFn: func(_ context.Context, holdID string, userID string, bookingID string) (domain.BookingCheckoutResult, error) {
+			return domain.BookingCheckoutResult{BookingID: bookingID, HoldID: holdID, UserID: userID, TotalAmount: 12.50}, nil
+		},
+	}
+	svc := newTestService(repo) // default gateway returns SUCCESS
+
+	result, err := svc.CheckoutBookingHold(context.Background(), domain.ConfirmBookingInput{
+		HoldID: "hold_1", UserID: "usr_1", PaymentMethod: "card", IdempotencyKey: "key_success",
+	})
+	if err != nil {
+		t.Fatalf("expected success, got %v", err)
+	}
+	if !paymentCreated {
+		t.Fatal("expected payment transaction to be created")
+	}
+	if !paymentUpdated {
+		t.Fatal("expected payment status to be updated to SUCCESS")
+	}
+	if result.TransactionID == "" {
+		t.Fatal("expected transactionID in result")
+	}
+	if result.BookingID == "" {
+		t.Fatal("expected bookingID in result")
+	}
+}
+
+func TestCheckout_PaymentDeclined_LeavesHoldRetryable(t *testing.T) {
+	var statusUpdatedTo string
+	repo := &bookingRepoStub{
+		updatePaymentStatusFn: func(_ context.Context, _ string, status string, _ string, failureReason string) error {
+			statusUpdatedTo = status
+			if failureReason == "" {
+				t.Fatal("expected failure reason on decline")
+			}
+			return nil
+		},
+	}
+	gw := &gatewayStub{
+		chargeFn: func(_ context.Context, _ payment.ChargeRequest) (payment.ChargeResponse, error) {
+			return payment.ChargeResponse{Status: "FAILED", Reason: "card declined by issuing bank"}, payment.ErrPaymentDeclined
+		},
+	}
+	svc := newTestServiceWithGateway(repo, gw)
+
+	_, err := svc.CheckoutBookingHold(context.Background(), domain.ConfirmBookingInput{
+		HoldID: "hold_1", UserID: "usr_1", PaymentMethod: "card_decline", IdempotencyKey: "key_decline",
+	})
+	if !errors.Is(err, payment.ErrPaymentDeclined) {
+		t.Fatalf("expected ErrPaymentDeclined, got %v", err)
+	}
+	if statusUpdatedTo != domain.PaymentStatusFailed {
+		t.Fatalf("expected payment status FAILED, got %s", statusUpdatedTo)
+	}
+}
+
+func TestCheckout_GatewayTimeout_LeavesHoldRetryable(t *testing.T) {
+	var statusUpdatedTo string
+	repo := &bookingRepoStub{
+		updatePaymentStatusFn: func(_ context.Context, _ string, status string, _ string, _ string) error {
+			statusUpdatedTo = status
+			return nil
+		},
+	}
+	gw := &gatewayStub{
+		chargeFn: func(_ context.Context, _ payment.ChargeRequest) (payment.ChargeResponse, error) {
+			return payment.ChargeResponse{}, payment.ErrGatewayTimeout
+		},
+	}
+	svc := newTestServiceWithGateway(repo, gw)
+
+	_, err := svc.CheckoutBookingHold(context.Background(), domain.ConfirmBookingInput{
+		HoldID: "hold_1", UserID: "usr_1", PaymentMethod: "card_timeout", IdempotencyKey: "key_timeout",
+	})
+	if !errors.Is(err, payment.ErrGatewayTimeout) {
+		t.Fatalf("expected ErrGatewayTimeout, got %v", err)
+	}
+	if statusUpdatedTo != domain.PaymentStatusFailed {
+		t.Fatalf("expected payment status FAILED, got %s", statusUpdatedTo)
+	}
+}
+
+func TestCheckout_Idempotency_ReturnsPreviousSuccess(t *testing.T) {
+	repo := &bookingRepoStub{
+		getPaymentByIdempotencyFn: func(_ context.Context, key string) (*domain.PaymentTransaction, error) {
+			return &domain.PaymentTransaction{
+				ID:             "txn_prev",
+				HoldID:         "hold_1",
+				UserID:         "usr_1",
+				Amount:         12.50,
+				PaymentMethod:  "card",
+				Status:         domain.PaymentStatusSuccess,
+				IdempotencyKey: key,
+			}, nil
+		},
+	}
+	svc := newTestService(repo)
+
+	result, err := svc.CheckoutBookingHold(context.Background(), domain.ConfirmBookingInput{
+		HoldID: "hold_1", UserID: "usr_1", PaymentMethod: "card", IdempotencyKey: "key_dup",
+	})
+	if err != nil {
+		t.Fatalf("expected success for idempotent replay, got %v", err)
+	}
+	if result.TransactionID != "txn_prev" {
+		t.Fatalf("expected previous transactionID txn_prev, got %s", result.TransactionID)
+	}
+	if result.Status != domain.BookingHoldStatusConfirmed {
+		t.Fatalf("expected CONFIRMED status, got %s", result.Status)
+	}
+}
+
+func TestCheckout_HoldExpired_ReturnsError(t *testing.T) {
+	repo := &bookingRepoStub{
+		getHoldDetailsFn: func(_ context.Context, _ string, _ string) (domain.BookingHold, error) {
+			return domain.BookingHold{
+				HoldID:        "hold_1",
+				UserID:        "usr_1",
+				Status:        domain.BookingHoldStatusHeld,
+				HoldExpiresAt: time.Now().UTC().Add(-1 * time.Minute), // expired
+				TotalAmount:   12.50,
+			}, nil
+		},
+	}
+	svc := newTestService(repo)
+
+	_, err := svc.CheckoutBookingHold(context.Background(), domain.ConfirmBookingInput{
+		HoldID: "hold_1", UserID: "usr_1", PaymentMethod: "card", IdempotencyKey: "key_exp",
+	})
+	if !errors.Is(err, repository.ErrHoldExpired) {
+		t.Fatalf("expected ErrHoldExpired, got %v", err)
+	}
+}
+
+func TestCheckout_HoldAlreadyConfirmed_ReturnsFinalized(t *testing.T) {
+	repo := &bookingRepoStub{
+		getHoldDetailsFn: func(_ context.Context, _ string, _ string) (domain.BookingHold, error) {
+			return domain.BookingHold{
+				HoldID:        "hold_1",
+				UserID:        "usr_1",
+				Status:        domain.BookingHoldStatusConfirmed,
+				HoldExpiresAt: time.Now().UTC().Add(5 * time.Minute),
+				TotalAmount:   12.50,
+			}, nil
+		},
+	}
+	svc := newTestService(repo)
+
+	_, err := svc.CheckoutBookingHold(context.Background(), domain.ConfirmBookingInput{
+		HoldID: "hold_1", UserID: "usr_1", PaymentMethod: "card", IdempotencyKey: "key_fin",
+	})
+	if !errors.Is(err, repository.ErrHoldFinalized) {
+		t.Fatalf("expected ErrHoldFinalized, got %v", err)
 	}
 }
