@@ -1,4 +1,5 @@
-<div class="seats-page">
+<div class="seats-shell">
+  <div class="seats-page">
   <a [routerLink]="['/movies', movieId()]" class="back">← Back to showtimes</a>
 
   @if (loading()) {
@@ -117,4 +118,5 @@
       <p class="warn inline">{{ selectionError() }}</p>
     }
   }
+  </div>
 </div>

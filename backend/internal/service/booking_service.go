@@ -231,6 +231,20 @@ func (s *BookingService) CancelBooking(ctx context.Context, bookingID string, us
 	return s.bookingRepository.CancelBooking(ctx, bid, uid)
 }
 
+func (s *BookingService) ReleaseBookingHold(ctx context.Context, holdID string, userID string) error {
+	hid := strings.TrimSpace(holdID)
+	if hid == "" {
+		return fmt.Errorf("holdId is required")
+	}
+
+	uid := strings.TrimSpace(userID)
+	if uid == "" {
+		return fmt.Errorf("userId is required")
+	}
+
+	return s.bookingRepository.ReleaseHold(ctx, hid, uid)
+}
+
 // GetTicketPDF fetches the booking, enforces ownership and confirmed status, then renders a PDF.
 func (s *BookingService) GetTicketPDF(ctx context.Context, bookingID string, userID string) ([]byte, string, error) {
 	bid := strings.TrimSpace(bookingID)

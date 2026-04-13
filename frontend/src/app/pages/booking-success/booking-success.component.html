@@ -1,0 +1,43 @@
+<div class="success-page">
+  <section class="success-card">
+    <div class="left">
+      <p class="eyebrow">Booking confirmed</p>
+      <h1>Your tickets are locked in!</h1>
+      <p class="subtext">Show this booking ID at the theater or download your PDF ticket.</p>
+
+      <div class="booking-id">Booking ID: {{ bookingId() }}</div>
+
+      <div class="meta-grid">
+        <div class="meta-item">
+          <span class="label">Seats</span>
+          <span class="value">{{ seats().length ? seats().join(', ') : 'Not available' }}</span>
+        </div>
+        <div class="meta-item">
+          <span class="label">Total paid</span>
+          <span class="value">{{ total() !== null ? (total()! | currency: 'USD') : 'Not available' }}</span>
+        </div>
+      </div>
+    </div>
+
+    <aside class="right">
+      <div class="ticket-preview">
+        <p class="ticket-title">E-ticket</p>
+        <p class="ticket-id">{{ bookingId() }}</p>
+        <p class="ticket-seats">{{ seats().length ? seats().join(', ') : 'Seats unavailable' }}</p>
+      </div>
+
+      <button type="button" class="download-btn" [disabled]="downloading()" (click)="downloadTicket()">
+        {{ downloading() ? 'Downloading...' : 'Download ticket (PDF)' }}
+      </button>
+
+      @if (downloadError()) {
+        <p class="error">{{ downloadError() }}</p>
+      }
+
+      <div class="actions">
+        <a [routerLink]="['/movies', movieId()]" class="link">Back to movie</a>
+        <a [routerLink]="['/']" class="link">Browse movies</a>
+      </div>
+    </aside>
+  </section>
+</div>

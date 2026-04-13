@@ -14,6 +14,9 @@ export interface AuthUser {
 
 export interface LoginResponse {
   message: string;
+  accessToken: string;
+  tokenType: string;
+  expiresAt: string;
   user: AuthUser;
 }
 

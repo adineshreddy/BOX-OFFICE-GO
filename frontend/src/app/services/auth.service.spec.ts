@@ -75,6 +75,9 @@ describe('AuthService', () => {
   it('setSessionFromLogin persists user and updates the signal', () => {
     const res = {
       message: 'ok',
+      accessToken: 'jwt-token',
+      tokenType: 'Bearer',
+      expiresAt: new Date().toISOString(),
       user: {
         id: 'u1',
         name: 'Test User',
@@ -87,7 +90,9 @@ describe('AuthService', () => {
     service.setSessionFromLogin(res);
 
     expect(globalThis.localStorage.getItem(USER_STORAGE_KEY)).toBe(JSON.stringify(res.user));
+    expect(globalThis.localStorage.getItem('token')).toBe('jwt-token');
     expect(service.getUser()).toEqual(res.user);
+    expect(service.getToken()).toBe('jwt-token');
     expect(service.isLoggedIn()).toBe(true);
   });
 

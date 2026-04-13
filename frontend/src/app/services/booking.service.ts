@@ -7,11 +7,26 @@ export class BookingService {
   constructor(private http: HttpClient) {}
 
   createBookingHold(data: { userId: string; showtimeId: string; seatNumbers: string[] }) {
-    return this.http.post(`${environment.apiUrl}/bookings/holds`, data);
+    return this.http.post<{ message: string; hold: { holdId: string; holdExpiresAt: string; totalAmount: number } }>(
+      `${environment.apiUrl}/bookings/holds`,
+      data
+    );
   }
 
-  checkoutBookingHold(data: { holdId: string; userId: string }) {
-    return this.http.post(`${environment.apiUrl}/bookings/checkout`, data);
+  checkoutBookingHold(data: {
+    holdId: string;
+    userId: string;
+    paymentMethod: string;
+    idempotencyKey: string;
+  }) {
+    return this.http.post<{
+      message: string;
+      booking: { bookingId: string; holdId: string; totalAmount: number; seatNumbers: string[]; status: string };
+    }>(`${environment.apiUrl}/bookings/checkout`, data);
+  }
+
+  releaseBookingHold(holdId: string) {
+    return this.http.delete<{ message: string }>(`${environment.apiUrl}/bookings/holds/${holdId}`);
   }
 
   getSeats(showId: string) {
