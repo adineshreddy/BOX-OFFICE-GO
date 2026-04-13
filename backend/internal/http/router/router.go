@@ -27,6 +27,7 @@ func New(authService *service.AuthService, movieService *service.MovieService, b
 	mux.Handle("POST /api/v1/bookings/checkout", authMiddleware.Require(http.HandlerFunc(bookingHandler.CheckoutBookingHold)))
 	mux.Handle("GET /api/v1/bookings", authMiddleware.Require(http.HandlerFunc(bookingHandler.GetUserBookings)))
 	mux.Handle("DELETE /api/v1/bookings", authMiddleware.Require(http.HandlerFunc(bookingHandler.CancelBooking)))
+	mux.Handle("GET /api/v1/bookings/{bookingId}/ticket", authMiddleware.Require(http.HandlerFunc(bookingHandler.DownloadTicket)))
 	mux.HandleFunc("GET /api/v1/movies", movieHandler.ListMovies)
 	mux.HandleFunc("GET /api/v1/movies/{movieId}", movieHandler.GetMovie)
 	mux.HandleFunc("GET /api/v1/shows/details", movieHandler.GetShowDetailsBySelection)

@@ -1,23 +1,31 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"strings"
 	"time"
 
 	"box-office-go/backend/internal/domain"
+	"box-office-go/backend/internal/payment"
 	"box-office-go/backend/internal/repository"
+
+	"github.com/jung-kurt/gofpdf/v2"
 )
 
 const defaultHoldDuration = 7 * time.Minute
 
 type BookingService struct {
 	bookingRepository repository.BookingRepository
+	paymentGateway    payment.Gateway
 }
 
-func NewBookingService(bookingRepository repository.BookingRepository) *BookingService {
-	return &BookingService{bookingRepository: bookingRepository}
+func NewBookingService(bookingRepository repository.BookingRepository, paymentGateway payment.Gateway) *BookingService {
+	return &BookingService{
+		bookingRepository: bookingRepository,
+		paymentGateway:    paymentGateway,
+	}
 }
 
 func (s *BookingService) ReleaseExpiredHolds(ctx context.Context) error {
@@ -60,12 +68,108 @@ func (s *BookingService) CheckoutBookingHold(ctx context.Context, input domain.C
 		return domain.BookingCheckoutResult{}, fmt.Errorf("userId is required")
 	}
 
+	paymentMethod := strings.TrimSpace(input.PaymentMethod)
+	if paymentMethod == "" {
+		return domain.BookingCheckoutResult{}, fmt.Errorf("paymentMethod is required")
+	}
+
+	idempotencyKey := strings.TrimSpace(input.IdempotencyKey)
+	if idempotencyKey == "" {
+		return domain.BookingCheckoutResult{}, fmt.Errorf("idempotencyKey is required")
+	}
+
+	// ── 1. Idempotency check ─────────────────────────────────────────
+	existing, err := s.bookingRepository.GetPaymentByIdempotencyKey(ctx, idempotencyKey)
+	if err != nil {
+		return domain.BookingCheckoutResult{}, fmt.Errorf("idempotency lookup: %w", err)
+	}
+	if existing != nil {
+		if existing.Status == domain.PaymentStatusSuccess {
+			// Payment already succeeded — return the confirmed booking.
+			return domain.BookingCheckoutResult{
+				HoldID:        existing.HoldID,
+				UserID:        existing.UserID,
+				TotalAmount:   existing.Amount,
+				Status:        domain.BookingHoldStatusConfirmed,
+				TransactionID: existing.ID,
+			}, nil
+		}
+		// Previous attempt failed — allow retry with a fresh transaction below.
+	}
+
+	// ── 2. Cleanup expired holds ─────────────────────────────────────
 	if err := s.bookingRepository.CleanupExpiredHolds(ctx); err != nil {
 		return domain.BookingCheckoutResult{}, fmt.Errorf("cleanup expired holds: %w", err)
 	}
 
+	// ── 3. Get hold details (validates hold exists, belongs to user, is HELD and not expired) ──
+	hold, err := s.bookingRepository.GetHoldDetails(ctx, holdID, userID)
+	if err != nil {
+		return domain.BookingCheckoutResult{}, err
+	}
+
+	if hold.Status != domain.BookingHoldStatusHeld {
+		if hold.Status == domain.BookingHoldStatusConfirmed {
+			return domain.BookingCheckoutResult{}, repository.ErrHoldFinalized
+		}
+		return domain.BookingCheckoutResult{}, repository.ErrHoldExpired
+	}
+	if hold.HoldExpiresAt.Before(time.Now().UTC()) {
+		return domain.BookingCheckoutResult{}, repository.ErrHoldExpired
+	}
+
+	// ── 4. Create PENDING payment transaction ────────────────────────
+	txnID := fmt.Sprintf("txn_%d", time.Now().UnixNano())
+	now := time.Now().UTC()
+	pendingTxn := domain.PaymentTransaction{
+		ID:             txnID,
+		HoldID:         holdID,
+		UserID:         userID,
+		Amount:         hold.TotalAmount,
+		PaymentMethod:  paymentMethod,
+		Status:         domain.PaymentStatusPending,
+		IdempotencyKey: idempotencyKey,
+		CreatedAt:      now,
+		UpdatedAt:      now,
+	}
+	if err := s.bookingRepository.CreatePaymentTransaction(ctx, pendingTxn); err != nil {
+		return domain.BookingCheckoutResult{}, fmt.Errorf("create payment transaction: %w", err)
+	}
+
+	// ── 5. Charge via gateway ────────────────────────────────────────
+	chargeResp, chargeErr := s.paymentGateway.Charge(ctx, payment.ChargeRequest{
+		Amount:        hold.TotalAmount,
+		PaymentMethod: paymentMethod,
+		HoldID:        holdID,
+		UserID:        userID,
+	})
+
+	// ── 6. Handle gateway timeout / unexpected error ─────────────────
+	if chargeErr != nil {
+		failReason := chargeErr.Error()
+		_ = s.bookingRepository.UpdatePaymentStatus(ctx, txnID, domain.PaymentStatusFailed, "", failReason)
+		return domain.BookingCheckoutResult{}, chargeErr
+	}
+
+	// ── 7. Handle decline ────────────────────────────────────────────
+	if chargeResp.Status != "SUCCESS" {
+		_ = s.bookingRepository.UpdatePaymentStatus(ctx, txnID, domain.PaymentStatusFailed, chargeResp.GatewayTxnID, chargeResp.Reason)
+		return domain.BookingCheckoutResult{}, payment.ErrPaymentDeclined
+	}
+
+	// ── 8. Payment succeeded — update txn and confirm booking ────────
+	if err := s.bookingRepository.UpdatePaymentStatus(ctx, txnID, domain.PaymentStatusSuccess, chargeResp.GatewayTxnID, ""); err != nil {
+		return domain.BookingCheckoutResult{}, fmt.Errorf("update payment status: %w", err)
+	}
+
 	bookingID := fmt.Sprintf("bok_%d", time.Now().UnixNano())
-	return s.bookingRepository.CheckoutHold(ctx, holdID, userID, bookingID)
+	result, err := s.bookingRepository.CheckoutHold(ctx, holdID, userID, bookingID)
+	if err != nil {
+		return domain.BookingCheckoutResult{}, err
+	}
+
+	result.TransactionID = txnID
+	return result, nil
 }
 
 func normalizeHoldInput(input domain.CreateBookingHoldInput) (domain.CreateBookingHoldInput, error) {
@@ -125,4 +229,127 @@ func (s *BookingService) CancelBooking(ctx context.Context, bookingID string, us
 	}
 
 	return s.bookingRepository.CancelBooking(ctx, bid, uid)
+}
+
+// GetTicketPDF fetches the booking, enforces ownership and confirmed status, then renders a PDF.
+func (s *BookingService) GetTicketPDF(ctx context.Context, bookingID string, userID string) ([]byte, string, error) {
+	bid := strings.TrimSpace(bookingID)
+	if bid == "" {
+		return nil, "", fmt.Errorf("bookingId is required")
+	}
+
+	uid := strings.TrimSpace(userID)
+	if uid == "" {
+		return nil, "", fmt.Errorf("userId is required")
+	}
+
+	ticket, err := s.bookingRepository.GetBookingForTicket(ctx, bid)
+	if err != nil {
+		return nil, "", err
+	}
+
+	if ticket.UserID != uid {
+		return nil, "", repository.ErrBookingNotOwned
+	}
+
+	if ticket.Status != "CONFIRMED" {
+		return nil, "", fmt.Errorf("ticket download is only available for confirmed bookings (current status: %s)", ticket.Status)
+	}
+
+	pdfBytes, err := renderTicketPDF(ticket)
+	if err != nil {
+		return nil, "", fmt.Errorf("render ticket pdf: %w", err)
+	}
+
+	filename := fmt.Sprintf("ticket_%s.pdf", bid)
+	return pdfBytes, filename, nil
+}
+
+// renderTicketPDF builds a single-page PDF ticket with booking essentials.
+func renderTicketPDF(t domain.TicketData) ([]byte, error) {
+	pdf := gofpdf.New("P", "mm", "A4", "")
+	pdf.SetMargins(15, 15, 15)
+	pdf.AddPage()
+
+	// --- Header band ---
+	pdf.SetFillColor(30, 27, 46) // dark purple
+	pdf.Rect(0, 0, 210, 40, "F")
+	pdf.SetTextColor(167, 139, 250) // light purple
+	pdf.SetFont("Helvetica", "B", 22)
+	pdf.SetY(10)
+	pdf.CellFormat(180, 12, "BOX OFFICE GO", "", 1, "C", false, 0, "")
+	pdf.SetFont("Helvetica", "", 11)
+	pdf.SetTextColor(200, 200, 200)
+	pdf.CellFormat(180, 8, "E-Ticket", "", 1, "C", false, 0, "")
+
+	// Reset text color
+	pdf.SetTextColor(40, 40, 40)
+
+	// --- Booking ID ---
+	pdf.SetY(48)
+	pdf.SetFont("Helvetica", "B", 11)
+	pdf.CellFormat(40, 8, "Booking ID:", "", 0, "", false, 0, "")
+	pdf.SetFont("Courier", "", 11)
+	pdf.CellFormat(0, 8, t.BookingID, "", 1, "", false, 0, "")
+
+	// --- Divider ---
+	pdf.SetDrawColor(200, 200, 200)
+	pdf.Line(15, pdf.GetY()+2, 195, pdf.GetY()+2)
+	pdf.SetY(pdf.GetY() + 6)
+
+	// --- Movie ---
+	pdf.SetFont("Helvetica", "B", 16)
+	pdf.CellFormat(0, 10, t.MovieTitle, "", 1, "", false, 0, "")
+	pdf.SetFont("Helvetica", "", 10)
+	pdf.SetTextColor(120, 120, 120)
+	pdf.CellFormat(0, 6, fmt.Sprintf("%s  |  %s", t.Language, t.Format), "", 1, "", false, 0, "")
+	pdf.SetTextColor(40, 40, 40)
+	pdf.Ln(4)
+
+	// --- Details grid ---
+	labelW := 40.0
+	pdf.SetFont("Helvetica", "B", 10)
+	pdf.CellFormat(labelW, 7, "Theater:", "", 0, "", false, 0, "")
+	pdf.SetFont("Helvetica", "", 10)
+	pdf.CellFormat(0, 7, fmt.Sprintf("%s, %s", t.TheaterName, t.City), "", 1, "", false, 0, "")
+
+	pdf.SetFont("Helvetica", "B", 10)
+	pdf.CellFormat(labelW, 7, "Screen:", "", 0, "", false, 0, "")
+	pdf.SetFont("Helvetica", "", 10)
+	pdf.CellFormat(0, 7, t.ScreenName, "", 1, "", false, 0, "")
+
+	pdf.SetFont("Helvetica", "B", 10)
+	pdf.CellFormat(labelW, 7, "Show Time:", "", 0, "", false, 0, "")
+	pdf.SetFont("Helvetica", "", 10)
+	pdf.CellFormat(0, 7, t.ShowTime.Format("Mon, 02 Jan 2006 at 03:04 PM"), "", 1, "", false, 0, "")
+
+	pdf.SetFont("Helvetica", "B", 10)
+	pdf.CellFormat(labelW, 7, "Seats:", "", 0, "", false, 0, "")
+	pdf.SetFont("Helvetica", "", 10)
+	pdf.CellFormat(0, 7, strings.Join(t.SeatNumbers, ", "), "", 1, "", false, 0, "")
+
+	pdf.SetFont("Helvetica", "B", 10)
+	pdf.CellFormat(labelW, 7, "Total:", "", 0, "", false, 0, "")
+	pdf.SetFont("Helvetica", "B", 12)
+	pdf.CellFormat(0, 7, fmt.Sprintf("$%.2f", t.TotalAmount), "", 1, "", false, 0, "")
+
+	pdf.Ln(4)
+
+	// --- Confirmed at ---
+	pdf.SetFont("Helvetica", "", 9)
+	pdf.SetTextColor(120, 120, 120)
+	pdf.CellFormat(0, 6, fmt.Sprintf("Confirmed at: %s", t.ConfirmedAt.Format(time.RFC3339)), "", 1, "", false, 0, "")
+
+	// --- Footer ---
+	pdf.SetY(270)
+	pdf.SetFont("Helvetica", "I", 8)
+	pdf.SetTextColor(160, 160, 160)
+	pdf.CellFormat(0, 5, "Present this ticket at the theater entrance. Enjoy the movie!", "", 1, "C", false, 0, "")
+
+	var buf bytes.Buffer
+	if err := pdf.Output(&buf); err != nil {
+		return nil, err
+	}
+
+	return buf.Bytes(), nil
 }

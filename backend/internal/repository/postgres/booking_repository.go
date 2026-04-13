@@ -447,4 +447,196 @@ func (r *BookingRepository) CancelBooking(ctx context.Context, bookingID string,
 	return tx.Commit()
 }
 
+func (r *BookingRepository) GetBookingForTicket(ctx context.Context, bookingID string) (domain.TicketData, error) {
+	query := `
+	SELECT
+		b.id,
+		b.user_id,
+		b.status,
+		b.total_amount,
+		b.confirmed_at,
+		b.hold_id,
+		m.title AS movie_title,
+		t.name  AS theater_name,
+		t.city,
+		s.screen_name,
+		s.start_time,
+		s.language,
+		s.format
+	FROM bookings b
+	JOIN showtimes s ON s.id = b.showtime_id
+	JOIN movies m    ON m.id = s.movie_id
+	JOIN theaters t  ON t.id = s.theater_id
+	WHERE b.id = $1
+	`
+
+	var td domain.TicketData
+	var holdID string
+
+	err := r.db.QueryRowContext(ctx, query, bookingID).Scan(
+		&td.BookingID,
+		&td.UserID,
+		&td.Status,
+		&td.TotalAmount,
+		&td.ConfirmedAt,
+		&holdID,
+		&td.MovieTitle,
+		&td.TheaterName,
+		&td.City,
+		&td.ScreenName,
+		&td.ShowTime,
+		&td.Language,
+		&td.Format,
+	)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return domain.TicketData{}, repository.ErrBookingNotFound
+		}
+		return domain.TicketData{}, err
+	}
+
+	seatRows, err := r.db.QueryContext(ctx,
+		`SELECT seat_number FROM booking_hold_seats WHERE hold_id = $1 ORDER BY seat_number ASC`,
+		holdID,
+	)
+	if err != nil {
+		return domain.TicketData{}, err
+	}
+	defer seatRows.Close()
+
+	seats := make([]string, 0)
+	for seatRows.Next() {
+		var seat string
+		if scanErr := seatRows.Scan(&seat); scanErr != nil {
+			return domain.TicketData{}, scanErr
+		}
+		seats = append(seats, seat)
+	}
+	if err := seatRows.Err(); err != nil {
+		return domain.TicketData{}, err
+	}
+
+	td.SeatNumbers = seats
+	return td, nil
+}
+
+// ── Payment transaction methods ──────────────────────────────────────
+
+func (r *BookingRepository) CreatePaymentTransaction(ctx context.Context, txn domain.PaymentTransaction) error {
+	query := `
+	INSERT INTO payment_transactions (id, hold_id, user_id, amount, currency, payment_method, gateway_txn_id, status, failure_reason, idempotency_key, created_at, updated_at)
+	VALUES ($1, $2, $3, $4, 'USD', $5, $6, $7, $8, $9, $10, $10)
+	`
+	_, err := r.db.ExecContext(ctx, query,
+		txn.ID,
+		txn.HoldID,
+		txn.UserID,
+		txn.Amount,
+		txn.PaymentMethod,
+		txn.GatewayTxnID,
+		txn.Status,
+		txn.FailureReason,
+		txn.IdempotencyKey,
+		txn.CreatedAt,
+	)
+	return err
+}
+
+func (r *BookingRepository) GetPaymentByIdempotencyKey(ctx context.Context, idempotencyKey string) (*domain.PaymentTransaction, error) {
+	query := `
+	SELECT id, hold_id, user_id, amount, payment_method, status, COALESCE(gateway_txn_id,''), COALESCE(failure_reason,''), idempotency_key, created_at, updated_at
+	FROM payment_transactions
+	WHERE idempotency_key = $1
+	`
+	var txn domain.PaymentTransaction
+	err := r.db.QueryRowContext(ctx, query, idempotencyKey).Scan(
+		&txn.ID,
+		&txn.HoldID,
+		&txn.UserID,
+		&txn.Amount,
+		&txn.PaymentMethod,
+		&txn.Status,
+		&txn.GatewayTxnID,
+		&txn.FailureReason,
+		&txn.IdempotencyKey,
+		&txn.CreatedAt,
+		&txn.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil // no previous payment — not an error
+		}
+		return nil, err
+	}
+	return &txn, nil
+}
+
+func (r *BookingRepository) UpdatePaymentStatus(ctx context.Context, txnID string, status string, gatewayTxnID string, failureReason string) error {
+	query := `
+	UPDATE payment_transactions
+	SET status = $2, gateway_txn_id = $3, failure_reason = $4, updated_at = NOW()
+	WHERE id = $1
+	`
+	res, err := r.db.ExecContext(ctx, query, txnID, status, gatewayTxnID, failureReason)
+	if err != nil {
+		return err
+	}
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return repository.ErrPaymentNotFound
+	}
+	return nil
+}
+
+func (r *BookingRepository) GetHoldDetails(ctx context.Context, holdID string, userID string) (domain.BookingHold, error) {
+	query := `
+	SELECT id, user_id, showtime_id, status, hold_expires_at, total_amount, created_at
+	FROM booking_holds
+	WHERE id = $1 AND user_id = $2
+	`
+	var hold domain.BookingHold
+	err := r.db.QueryRowContext(ctx, query, holdID, userID).Scan(
+		&hold.HoldID,
+		&hold.UserID,
+		&hold.ShowtimeID,
+		&hold.Status,
+		&hold.HoldExpiresAt,
+		&hold.TotalAmount,
+		&hold.CreatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return domain.BookingHold{}, repository.ErrHoldNotFound
+		}
+		return domain.BookingHold{}, err
+	}
+
+	seatRows, err := r.db.QueryContext(ctx,
+		`SELECT seat_number FROM booking_hold_seats WHERE hold_id = $1 ORDER BY seat_number ASC`,
+		holdID,
+	)
+	if err != nil {
+		return domain.BookingHold{}, err
+	}
+	defer seatRows.Close()
+
+	seats := make([]string, 0)
+	for seatRows.Next() {
+		var seat string
+		if scanErr := seatRows.Scan(&seat); scanErr != nil {
+			return domain.BookingHold{}, scanErr
+		}
+		seats = append(seats, seat)
+	}
+	if err := seatRows.Err(); err != nil {
+		return domain.BookingHold{}, err
+	}
+
+	hold.SeatNumbers = seats
+	return hold, nil
+}
+
 var _ repository.BookingRepository = (*BookingRepository)(nil)

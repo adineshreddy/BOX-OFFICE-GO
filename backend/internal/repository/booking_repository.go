@@ -16,6 +16,9 @@ var (
 	ErrHoldFinalized           = errors.New("booking hold already finalized")
 	ErrBookingNotFound         = errors.New("booking not found")
 	ErrBookingAlreadyCancelled = errors.New("booking is already cancelled")
+	ErrBookingNotOwned         = errors.New("booking does not belong to the requesting user")
+	ErrDuplicatePayment        = errors.New("duplicate payment for this idempotency key")
+	ErrPaymentNotFound         = errors.New("payment transaction not found")
 )
 
 type BookingRepository interface {
@@ -24,4 +27,11 @@ type BookingRepository interface {
 	CheckoutHold(ctx context.Context, holdID string, userID string, bookingID string) (domain.BookingCheckoutResult, error)
 	ListByUserID(ctx context.Context, userID string) ([]domain.UserBooking, error)
 	CancelBooking(ctx context.Context, bookingID string, userID string) error
+	GetBookingForTicket(ctx context.Context, bookingID string) (domain.TicketData, error)
+
+	// Payment transaction methods
+	CreatePaymentTransaction(ctx context.Context, txn domain.PaymentTransaction) error
+	GetPaymentByIdempotencyKey(ctx context.Context, idempotencyKey string) (*domain.PaymentTransaction, error)
+	UpdatePaymentStatus(ctx context.Context, txnID string, status string, gatewayTxnID string, failureReason string) error
+	GetHoldDetails(ctx context.Context, holdID string, userID string) (domain.BookingHold, error)
 }
