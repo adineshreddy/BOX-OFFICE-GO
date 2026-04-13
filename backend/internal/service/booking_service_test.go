@@ -3,18 +3,21 @@ package service
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
 	"box-office-go/backend/internal/domain"
+	"box-office-go/backend/internal/repository"
 )
 
 type bookingRepoStub struct {
-	cleanupExpiredFn func(ctx context.Context) error
-	createHoldFn     func(ctx context.Context, input domain.CreateBookingHoldInput, holdID string, holdExpiresAt time.Time) (domain.BookingHold, error)
-	checkoutHoldFn   func(ctx context.Context, holdID string, userID string, bookingID string) (domain.BookingCheckoutResult, error)
-	listByUserIDFn   func(ctx context.Context, userID string) ([]domain.UserBooking, error)
-	cancelBookingFn  func(ctx context.Context, bookingID string, userID string) error
+	cleanupExpiredFn      func(ctx context.Context) error
+	createHoldFn          func(ctx context.Context, input domain.CreateBookingHoldInput, holdID string, holdExpiresAt time.Time) (domain.BookingHold, error)
+	checkoutHoldFn        func(ctx context.Context, holdID string, userID string, bookingID string) (domain.BookingCheckoutResult, error)
+	listByUserIDFn        func(ctx context.Context, userID string) ([]domain.UserBooking, error)
+	cancelBookingFn       func(ctx context.Context, bookingID string, userID string) error
+	getBookingForTicketFn func(ctx context.Context, bookingID string) (domain.TicketData, error)
 }
 
 func (s *bookingRepoStub) CleanupExpiredHolds(ctx context.Context) error {
@@ -34,6 +37,12 @@ func (s *bookingRepoStub) ListByUserID(ctx context.Context, userID string) ([]do
 }
 func (s *bookingRepoStub) CancelBooking(ctx context.Context, bookingID string, userID string) error {
 	return s.cancelBookingFn(ctx, bookingID, userID)
+}
+func (s *bookingRepoStub) GetBookingForTicket(ctx context.Context, bookingID string) (domain.TicketData, error) {
+	if s.getBookingForTicketFn == nil {
+		return domain.TicketData{}, nil
+	}
+	return s.getBookingForTicketFn(ctx, bookingID)
 }
 
 func TestNewBookingService(t *testing.T) {
@@ -155,5 +164,94 @@ func TestBookingServiceCancelBooking(t *testing.T) {
 	}
 	if !called {
 		t.Fatal("expected repo cancel call")
+	}
+}
+
+func TestBookingServiceGetTicketPDF_EmptyBookingID(t *testing.T) {
+	svc := NewBookingService(&bookingRepoStub{})
+	_, _, err := svc.GetTicketPDF(context.Background(), "  ", "usr_1")
+	if err == nil || !strings.Contains(err.Error(), "bookingId is required") {
+		t.Fatalf("expected bookingId validation error, got %v", err)
+	}
+}
+
+func TestBookingServiceGetTicketPDF_EmptyUserID(t *testing.T) {
+	svc := NewBookingService(&bookingRepoStub{})
+	_, _, err := svc.GetTicketPDF(context.Background(), "bok_1", "  ")
+	if err == nil || !strings.Contains(err.Error(), "userId is required") {
+		t.Fatalf("expected userId validation error, got %v", err)
+	}
+}
+
+func TestBookingServiceGetTicketPDF_BookingNotFound(t *testing.T) {
+	svc := NewBookingService(&bookingRepoStub{
+		getBookingForTicketFn: func(_ context.Context, _ string) (domain.TicketData, error) {
+			return domain.TicketData{}, repository.ErrBookingNotFound
+		},
+	})
+	_, _, err := svc.GetTicketPDF(context.Background(), "bok_1", "usr_1")
+	if !errors.Is(err, repository.ErrBookingNotFound) {
+		t.Fatalf("expected ErrBookingNotFound, got %v", err)
+	}
+}
+
+func TestBookingServiceGetTicketPDF_NotOwned(t *testing.T) {
+	svc := NewBookingService(&bookingRepoStub{
+		getBookingForTicketFn: func(_ context.Context, _ string) (domain.TicketData, error) {
+			return domain.TicketData{UserID: "usr_other", Status: "CONFIRMED"}, nil
+		},
+	})
+	_, _, err := svc.GetTicketPDF(context.Background(), "bok_1", "usr_1")
+	if !errors.Is(err, repository.ErrBookingNotOwned) {
+		t.Fatalf("expected ErrBookingNotOwned, got %v", err)
+	}
+}
+
+func TestBookingServiceGetTicketPDF_NotConfirmed(t *testing.T) {
+	svc := NewBookingService(&bookingRepoStub{
+		getBookingForTicketFn: func(_ context.Context, _ string) (domain.TicketData, error) {
+			return domain.TicketData{UserID: "usr_1", Status: "CANCELLED"}, nil
+		},
+	})
+	_, _, err := svc.GetTicketPDF(context.Background(), "bok_1", "usr_1")
+	if err == nil || !strings.Contains(err.Error(), "only available for confirmed bookings") {
+		t.Fatalf("expected non-confirmed error, got %v", err)
+	}
+}
+
+func TestBookingServiceGetTicketPDF_Success(t *testing.T) {
+	svc := NewBookingService(&bookingRepoStub{
+		getBookingForTicketFn: func(_ context.Context, bookingID string) (domain.TicketData, error) {
+			return domain.TicketData{
+				BookingID:   bookingID,
+				UserID:      "usr_1",
+				MovieTitle:  "Test Movie",
+				TheaterName: "Grand Theater",
+				City:        "Gainesville",
+				ScreenName:  "Screen 1",
+				ShowTime:    time.Date(2026, 4, 15, 19, 0, 0, 0, time.UTC),
+				Language:    "English",
+				Format:      "2D",
+				SeatNumbers: []string{"A01", "A02"},
+				TotalAmount: 25.50,
+				Status:      "CONFIRMED",
+				ConfirmedAt: time.Date(2026, 4, 12, 10, 0, 0, 0, time.UTC),
+			}, nil
+		},
+	})
+
+	pdfBytes, filename, err := svc.GetTicketPDF(context.Background(), "bok_1", "usr_1")
+	if err != nil {
+		t.Fatalf("expected success, got %v", err)
+	}
+	if filename != "ticket_bok_1.pdf" {
+		t.Fatalf("expected filename ticket_bok_1.pdf, got %s", filename)
+	}
+	if len(pdfBytes) == 0 {
+		t.Fatal("expected non-empty PDF bytes")
+	}
+	// PDF files start with %PDF
+	if !strings.HasPrefix(string(pdfBytes), "%PDF") {
+		t.Fatal("expected PDF magic header")
 	}
 }

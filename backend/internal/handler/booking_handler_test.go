@@ -17,11 +17,12 @@ import (
 )
 
 type bookingRepoHandlerStub struct {
-	cleanupExpiredFn func(ctx context.Context) error
-	createHoldFn     func(ctx context.Context, input domain.CreateBookingHoldInput, holdID string, holdExpiresAt time.Time) (domain.BookingHold, error)
-	checkoutHoldFn   func(ctx context.Context, holdID string, userID string, bookingID string) (domain.BookingCheckoutResult, error)
-	listByUserIDFn   func(ctx context.Context, userID string) ([]domain.UserBooking, error)
-	cancelBookingFn  func(ctx context.Context, bookingID string, userID string) error
+	cleanupExpiredFn      func(ctx context.Context) error
+	createHoldFn          func(ctx context.Context, input domain.CreateBookingHoldInput, holdID string, holdExpiresAt time.Time) (domain.BookingHold, error)
+	checkoutHoldFn        func(ctx context.Context, holdID string, userID string, bookingID string) (domain.BookingCheckoutResult, error)
+	listByUserIDFn        func(ctx context.Context, userID string) ([]domain.UserBooking, error)
+	cancelBookingFn       func(ctx context.Context, bookingID string, userID string) error
+	getBookingForTicketFn func(ctx context.Context, bookingID string) (domain.TicketData, error)
 }
 
 func (s *bookingRepoHandlerStub) CleanupExpiredHolds(ctx context.Context) error {
@@ -45,6 +46,13 @@ func (s *bookingRepoHandlerStub) ListByUserID(ctx context.Context, userID string
 
 func (s *bookingRepoHandlerStub) CancelBooking(ctx context.Context, bookingID string, userID string) error {
 	return s.cancelBookingFn(ctx, bookingID, userID)
+}
+
+func (s *bookingRepoHandlerStub) GetBookingForTicket(ctx context.Context, bookingID string) (domain.TicketData, error) {
+	if s.getBookingForTicketFn == nil {
+		return domain.TicketData{}, nil
+	}
+	return s.getBookingForTicketFn(ctx, bookingID)
 }
 
 func newBookingHandlerForTest(repo repository.BookingRepository) *BookingHandler {
@@ -190,5 +198,107 @@ func TestBookingHandlerCancelBooking_QueryBookingID_Success(t *testing.T) {
 	h.CancelBooking(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+// --- DownloadTicket tests ---
+
+// ticketRouteRequest creates a request routed through a mux so PathValue works.
+func ticketRouteRequest(t *testing.T, h *BookingHandler, bookingID string, userID string) *httptest.ResponseRecorder {
+	t.Helper()
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/v1/bookings/{bookingId}/ticket", h.DownloadTicket)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/bookings/"+bookingID+"/ticket", nil)
+	if userID != "" {
+		req = withAuth(req, userID)
+	}
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	return rec
+}
+
+func TestDownloadTicket_RequiresAuth(t *testing.T) {
+	h := newBookingHandlerForTest(&bookingRepoHandlerStub{})
+	rec := ticketRouteRequest(t, h, "bok_1", "")
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestDownloadTicket_NotFound(t *testing.T) {
+	h := newBookingHandlerForTest(&bookingRepoHandlerStub{
+		getBookingForTicketFn: func(_ context.Context, _ string) (domain.TicketData, error) {
+			return domain.TicketData{}, repository.ErrBookingNotFound
+		},
+	})
+	rec := ticketRouteRequest(t, h, "bok_999", "usr_1")
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestDownloadTicket_NotOwned(t *testing.T) {
+	h := newBookingHandlerForTest(&bookingRepoHandlerStub{
+		getBookingForTicketFn: func(_ context.Context, _ string) (domain.TicketData, error) {
+			return domain.TicketData{UserID: "usr_other", Status: "CONFIRMED"}, nil
+		},
+	})
+	rec := ticketRouteRequest(t, h, "bok_1", "usr_1")
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestDownloadTicket_NonConfirmed(t *testing.T) {
+	h := newBookingHandlerForTest(&bookingRepoHandlerStub{
+		getBookingForTicketFn: func(_ context.Context, _ string) (domain.TicketData, error) {
+			return domain.TicketData{UserID: "usr_1", Status: "CANCELLED"}, nil
+		},
+	})
+	rec := ticketRouteRequest(t, h, "bok_1", "usr_1")
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("expected 409, got %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestDownloadTicket_Success(t *testing.T) {
+	h := newBookingHandlerForTest(&bookingRepoHandlerStub{
+		getBookingForTicketFn: func(_ context.Context, bookingID string) (domain.TicketData, error) {
+			return domain.TicketData{
+				BookingID:   bookingID,
+				UserID:      "usr_1",
+				MovieTitle:  "Test Movie",
+				TheaterName: "Grand Theater",
+				City:        "Gainesville",
+				ScreenName:  "Screen 1",
+				ShowTime:    time.Date(2026, 4, 15, 19, 0, 0, 0, time.UTC),
+				Language:    "English",
+				Format:      "2D",
+				SeatNumbers: []string{"A01", "A02"},
+				TotalAmount: 25.50,
+				Status:      "CONFIRMED",
+				ConfirmedAt: time.Date(2026, 4, 12, 10, 0, 0, 0, time.UTC),
+			}, nil
+		},
+	})
+	rec := ticketRouteRequest(t, h, "bok_1", "usr_1")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	ct := rec.Header().Get("Content-Type")
+	if ct != "application/pdf" {
+		t.Fatalf("expected Content-Type application/pdf, got %s", ct)
+	}
+	cd := rec.Header().Get("Content-Disposition")
+	if cd == "" {
+		t.Fatal("expected Content-Disposition header")
+	}
+	body := rec.Body.String()
+	if len(body) == 0 {
+		t.Fatal("expected non-empty response body")
+	}
+	if body[:4] != "%PDF" {
+		t.Fatal("expected PDF magic header in response")
 	}
 }

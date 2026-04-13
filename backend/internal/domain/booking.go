@@ -59,3 +59,20 @@ type UserBooking struct {
 	Language    string    `json:"language"`
 	Format      string    `json:"format"`
 }
+
+// TicketData holds the fully-joined booking information needed to render a PDF ticket.
+type TicketData struct {
+	BookingID   string
+	UserID      string
+	MovieTitle  string
+	TheaterName string
+	City        string
+	ScreenName  string
+	ShowTime    time.Time
+	Language    string
+	Format      string
+	SeatNumbers []string
+	TotalAmount float64
+	Status      string
+	ConfirmedAt time.Time
+}

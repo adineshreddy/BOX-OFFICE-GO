@@ -16,6 +16,7 @@ var (
 	ErrHoldFinalized           = errors.New("booking hold already finalized")
 	ErrBookingNotFound         = errors.New("booking not found")
 	ErrBookingAlreadyCancelled = errors.New("booking is already cancelled")
+	ErrBookingNotOwned         = errors.New("booking does not belong to the requesting user")
 )
 
 type BookingRepository interface {
@@ -24,4 +25,5 @@ type BookingRepository interface {
 	CheckoutHold(ctx context.Context, holdID string, userID string, bookingID string) (domain.BookingCheckoutResult, error)
 	ListByUserID(ctx context.Context, userID string) ([]domain.UserBooking, error)
 	CancelBooking(ctx context.Context, bookingID string, userID string) error
+	GetBookingForTicket(ctx context.Context, bookingID string) (domain.TicketData, error)
 }

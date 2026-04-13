@@ -181,3 +181,47 @@ func (h *BookingHandler) CancelBooking(w http.ResponseWriter, r *http.Request) {
 		"message": "booking cancelled successfully",
 	})
 }
+
+// GET /api/v1/bookings/{bookingId}/ticket
+func (h *BookingHandler) DownloadTicket(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		response.Error(w, http.StatusMethodNotAllowed, "method not allowed", nil)
+		return
+	}
+
+	bookingID := strings.TrimSpace(r.PathValue("bookingId"))
+	if bookingID == "" {
+		response.Error(w, http.StatusBadRequest, "bookingId path parameter is required", nil)
+		return
+	}
+
+	identity, ok := middleware.AuthIdentityFromContext(r.Context())
+	if !ok || identity.UserID == "" {
+		response.Error(w, http.StatusUnauthorized, "unauthorized", nil)
+		return
+	}
+
+	pdfBytes, filename, err := h.bookingService.GetTicketPDF(r.Context(), bookingID, identity.UserID)
+	if err != nil {
+		if errors.Is(err, repository.ErrBookingNotFound) {
+			response.Error(w, http.StatusNotFound, "booking not found", nil)
+			return
+		}
+		if errors.Is(err, repository.ErrBookingNotOwned) {
+			response.Error(w, http.StatusForbidden, "you do not have access to this booking", nil)
+			return
+		}
+		errMsg := err.Error()
+		if strings.Contains(errMsg, "only available for confirmed bookings") {
+			response.Error(w, http.StatusConflict, errMsg, nil)
+			return
+		}
+		response.Error(w, http.StatusInternalServerError, "failed to generate ticket", nil)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/pdf")
+	w.Header().Set("Content-Disposition", "attachment; filename=\""+filename+"\"")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(pdfBytes)
+}

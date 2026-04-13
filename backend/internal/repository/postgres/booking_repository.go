@@ -447,4 +447,77 @@ func (r *BookingRepository) CancelBooking(ctx context.Context, bookingID string,
 	return tx.Commit()
 }
 
+func (r *BookingRepository) GetBookingForTicket(ctx context.Context, bookingID string) (domain.TicketData, error) {
+	query := `
+	SELECT
+		b.id,
+		b.user_id,
+		b.status,
+		b.total_amount,
+		b.confirmed_at,
+		b.hold_id,
+		m.title AS movie_title,
+		t.name  AS theater_name,
+		t.city,
+		s.screen_name,
+		s.start_time,
+		s.language,
+		s.format
+	FROM bookings b
+	JOIN showtimes s ON s.id = b.showtime_id
+	JOIN movies m    ON m.id = s.movie_id
+	JOIN theaters t  ON t.id = s.theater_id
+	WHERE b.id = $1
+	`
+
+	var td domain.TicketData
+	var holdID string
+
+	err := r.db.QueryRowContext(ctx, query, bookingID).Scan(
+		&td.BookingID,
+		&td.UserID,
+		&td.Status,
+		&td.TotalAmount,
+		&td.ConfirmedAt,
+		&holdID,
+		&td.MovieTitle,
+		&td.TheaterName,
+		&td.City,
+		&td.ScreenName,
+		&td.ShowTime,
+		&td.Language,
+		&td.Format,
+	)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return domain.TicketData{}, repository.ErrBookingNotFound
+		}
+		return domain.TicketData{}, err
+	}
+
+	seatRows, err := r.db.QueryContext(ctx,
+		`SELECT seat_number FROM booking_hold_seats WHERE hold_id = $1 ORDER BY seat_number ASC`,
+		holdID,
+	)
+	if err != nil {
+		return domain.TicketData{}, err
+	}
+	defer seatRows.Close()
+
+	seats := make([]string, 0)
+	for seatRows.Next() {
+		var seat string
+		if scanErr := seatRows.Scan(&seat); scanErr != nil {
+			return domain.TicketData{}, scanErr
+		}
+		seats = append(seats, seat)
+	}
+	if err := seatRows.Err(); err != nil {
+		return domain.TicketData{}, err
+	}
+
+	td.SeatNumbers = seats
+	return td, nil
+}
+
 var _ repository.BookingRepository = (*BookingRepository)(nil)
