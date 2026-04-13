@@ -524,8 +524,8 @@ func (r *BookingRepository) GetBookingForTicket(ctx context.Context, bookingID s
 
 func (r *BookingRepository) CreatePaymentTransaction(ctx context.Context, txn domain.PaymentTransaction) error {
 	query := `
-	INSERT INTO payment_transactions (id, hold_id, user_id, amount, currency, payment_method, gateway_txn_id, status, failure_reason, idempotency_key, created_at, updated_at)
-	VALUES ($1, $2, $3, $4, 'USD', $5, $6, $7, $8, $9, $10, $10)
+	INSERT INTO payment_transactions (id, hold_id, user_id, amount, payment_method, gateway_txn_id, status, failure_reason, idempotency_key, created_at, updated_at)
+	VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10)
 	`
 	_, err := r.db.ExecContext(ctx, query,
 		txn.ID,
@@ -540,6 +540,57 @@ func (r *BookingRepository) CreatePaymentTransaction(ctx context.Context, txn do
 		txn.CreatedAt,
 	)
 	return err
+}
+
+func (r *BookingRepository) ReleaseHold(ctx context.Context, holdID string, userID string) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	var holdStatus string
+	err = tx.QueryRowContext(
+		ctx,
+		`SELECT status FROM booking_holds WHERE id = $1 AND user_id = $2 FOR UPDATE`,
+		holdID,
+		userID,
+	).Scan(&holdStatus)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return repository.ErrHoldNotFound
+		}
+		return err
+	}
+
+	if holdStatus == domain.BookingHoldStatusConfirmed {
+		return repository.ErrHoldFinalized
+	}
+	if holdStatus != domain.BookingHoldStatusHeld {
+		return repository.ErrHoldAlreadyReleased
+	}
+
+	_, err = tx.ExecContext(ctx, `UPDATE booking_holds SET status = 'EXPIRED', updated_at = NOW() WHERE id = $1`, holdID)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.ExecContext(
+		ctx,
+		`UPDATE seat_inventory si
+		 SET is_held = FALSE, updated_at = NOW()
+		 FROM booking_hold_seats bhs
+		 WHERE bhs.hold_id = $1
+		   AND si.showtime_id = bhs.showtime_id
+		   AND si.seat_number = bhs.seat_number
+		   AND si.is_available = TRUE`,
+		holdID,
+	)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit()
 }
 
 func (r *BookingRepository) GetPaymentByIdempotencyKey(ctx context.Context, idempotencyKey string) (*domain.PaymentTransaction, error) {

@@ -110,6 +110,9 @@ func handleBookingError(w http.ResponseWriter, err error) {
 	case errors.Is(err, repository.ErrHoldFinalized):
 		response.Error(w, http.StatusConflict, "booking hold already finalized", nil)
 		return
+	case errors.Is(err, repository.ErrHoldAlreadyReleased):
+		response.Error(w, http.StatusConflict, "booking hold is already released", nil)
+		return
 	case errors.Is(err, payment.ErrPaymentDeclined):
 		response.Error(w, http.StatusPaymentRequired, "payment declined", nil)
 		return
@@ -125,6 +128,35 @@ func handleBookingError(w http.ResponseWriter, err error) {
 	}
 
 	response.Error(w, http.StatusInternalServerError, "booking operation failed", nil)
+}
+
+// DELETE /api/v1/bookings/holds/{holdId}
+func (h *BookingHandler) ReleaseBookingHold(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete {
+		response.Error(w, http.StatusMethodNotAllowed, "method not allowed", nil)
+		return
+	}
+
+	holdID := strings.TrimSpace(r.PathValue("holdId"))
+	if holdID == "" {
+		response.Error(w, http.StatusBadRequest, "holdId path parameter is required", nil)
+		return
+	}
+
+	identity, ok := middleware.AuthIdentityFromContext(r.Context())
+	if !ok || identity.UserID == "" {
+		response.Error(w, http.StatusUnauthorized, "unauthorized", nil)
+		return
+	}
+
+	if err := h.bookingService.ReleaseBookingHold(r.Context(), holdID, identity.UserID); err != nil {
+		handleBookingError(w, err)
+		return
+	}
+
+	response.JSON(w, http.StatusOK, map[string]string{
+		"message": "booking hold released successfully",
+	})
 }
 
 // GET /api/v1/bookings

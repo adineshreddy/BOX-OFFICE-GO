@@ -14,6 +14,7 @@ var (
 	ErrHoldNotFound            = errors.New("booking hold not found")
 	ErrHoldExpired             = errors.New("booking hold has expired")
 	ErrHoldFinalized           = errors.New("booking hold already finalized")
+	ErrHoldAlreadyReleased     = errors.New("booking hold is already released")
 	ErrBookingNotFound         = errors.New("booking not found")
 	ErrBookingAlreadyCancelled = errors.New("booking is already cancelled")
 	ErrBookingNotOwned         = errors.New("booking does not belong to the requesting user")
@@ -34,4 +35,5 @@ type BookingRepository interface {
 	GetPaymentByIdempotencyKey(ctx context.Context, idempotencyKey string) (*domain.PaymentTransaction, error)
 	UpdatePaymentStatus(ctx context.Context, txnID string, status string, gatewayTxnID string, failureReason string) error
 	GetHoldDetails(ctx context.Context, holdID string, userID string) (domain.BookingHold, error)
+	ReleaseHold(ctx context.Context, holdID string, userID string) error
 }

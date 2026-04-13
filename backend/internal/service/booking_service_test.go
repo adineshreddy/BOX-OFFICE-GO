@@ -25,6 +25,7 @@ type bookingRepoStub struct {
 	getPaymentByIdempotencyFn func(ctx context.Context, key string) (*domain.PaymentTransaction, error)
 	updatePaymentStatusFn     func(ctx context.Context, txnID string, status string, gatewayTxnID string, failureReason string) error
 	getHoldDetailsFn          func(ctx context.Context, holdID string, userID string) (domain.BookingHold, error)
+	releaseHoldFn             func(ctx context.Context, holdID string, userID string) error
 }
 
 func (s *bookingRepoStub) CleanupExpiredHolds(ctx context.Context) error {
@@ -86,6 +87,12 @@ func (s *bookingRepoStub) GetHoldDetails(ctx context.Context, holdID string, use
 		}, nil
 	}
 	return s.getHoldDetailsFn(ctx, holdID, userID)
+}
+func (s *bookingRepoStub) ReleaseHold(ctx context.Context, holdID string, userID string) error {
+	if s.releaseHoldFn == nil {
+		return nil
+	}
+	return s.releaseHoldFn(ctx, holdID, userID)
 }
 
 // ── gateway stub ─────────────────────────────────────────────────────
@@ -265,6 +272,26 @@ func TestBookingServiceCancelBooking(t *testing.T) {
 	}
 	if !called {
 		t.Fatal("expected repo cancel call")
+	}
+}
+
+func TestBookingServiceReleaseBookingHold(t *testing.T) {
+	called := false
+	svc := newTestService(&bookingRepoStub{
+		releaseHoldFn: func(_ context.Context, holdID string, userID string) error {
+			called = true
+			if holdID != "hold_1" || userID != "usr_1" {
+				t.Fatalf("unexpected params holdID=%s userID=%s", holdID, userID)
+			}
+			return nil
+		},
+	})
+
+	if err := svc.ReleaseBookingHold(context.Background(), " hold_1 ", " usr_1 "); err != nil {
+		t.Fatalf("expected nil error, got %v", err)
+	}
+	if !called {
+		t.Fatal("expected repo release call")
 	}
 }
 

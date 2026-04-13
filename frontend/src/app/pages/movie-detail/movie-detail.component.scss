@@ -5,10 +5,13 @@
   min-height: 100vh;
   box-sizing: border-box;
   color-scheme: dark;
-  color: #f1f0f7;
+  color: #f8fafc;
+  /* Aligned with booking-success / seat selection full-page theme */
   background:
-    radial-gradient(ellipse 120% 80% at 50% -20%, rgba(124, 58, 237, 0.18), transparent 55%),
-    linear-gradient(180deg, #09090f 0%, #0c0b12 35%, #08080c 100%);
+    radial-gradient(circle at 10% 14%, rgba(14, 165, 233, 0.2), transparent 38%),
+    radial-gradient(circle at 88% 84%, rgba(74, 222, 128, 0.16), transparent 40%),
+    radial-gradient(ellipse 120% 80% at 50% -15%, rgba(124, 58, 237, 0.14), transparent 52%),
+    linear-gradient(150deg, #020617 0%, #0f172a 45%, #0b1220 100%);
 }
 
 .detail-page {
@@ -126,6 +129,11 @@
   gap: 1.75rem clamp(1.5rem, 4vw, 4rem);
   margin-bottom: 2.75rem;
   align-items: start;
+  padding: clamp(1rem, 2vw, 1.5rem);
+  border-radius: 22px;
+  border: 1px solid rgba(125, 211, 252, 0.18);
+  background: linear-gradient(165deg, rgba(15, 23, 42, 0.45), rgba(30, 41, 59, 0.25));
+  box-shadow: 0 20px 48px rgba(2, 6, 23, 0.35);
 }
 @media (max-width: 640px) {
   .hero {
@@ -228,11 +236,22 @@
 .showtimes-panel {
   position: relative;
   padding: 1.75rem 1.5rem 2rem;
-  border-radius: 20px;
-  background: var(--surface);
-  border: 1px solid var(--stroke);
-  backdrop-filter: blur(12px);
-  box-shadow: 0 4px 40px rgba(0, 0, 0, 0.25);
+  border-radius: 22px;
+  background: linear-gradient(165deg, rgba(15, 23, 42, 0.72), rgba(30, 41, 59, 0.55));
+  border: 1px solid rgba(125, 211, 252, 0.22);
+  backdrop-filter: blur(14px);
+  box-shadow:
+    0 28px 56px rgba(2, 6, 23, 0.45),
+    inset 0 1px 0 rgba(226, 232, 240, 0.06);
+}
+
+.showtimes-panel--highlight {
+  border-color: rgba(94, 234, 212, 0.32);
+  box-shadow:
+    0 0 0 1px rgba(124, 58, 237, 0.12),
+    0 28px 56px rgba(2, 6, 23, 0.45),
+    0 0 48px rgba(56, 189, 248, 0.08),
+    inset 0 1px 0 rgba(226, 232, 240, 0.08);
 }
 @media (max-width: 640px) {
   .showtimes-panel {
@@ -265,9 +284,11 @@
 }
 .panel-title {
   margin: 0 0 0.35rem;
-  font-size: 1.45rem;
+  font-size: clamp(1.35rem, 2.8vw, 1.55rem);
   font-weight: 800;
   letter-spacing: -0.03em;
+  color: #f8fafc;
+  text-shadow: 0 8px 28px rgba(14, 165, 233, 0.15);
 }
 .panel-sub {
   margin: 0;
@@ -364,16 +385,16 @@
 
 .theater-card {
   padding: 1.15rem 1.2rem 1.2rem;
-  border-radius: 16px;
-  background: rgba(0, 0, 0, 0.22);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 18px;
+  background: linear-gradient(160deg, rgba(15, 23, 42, 0.65), rgba(30, 41, 59, 0.4));
+  border: 1px solid rgba(148, 163, 184, 0.18);
   transition:
     border-color 0.2s ease,
     box-shadow 0.2s ease;
 }
 .theater-card:hover {
-  border-color: rgba(139, 92, 246, 0.22);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  border-color: rgba(94, 234, 212, 0.28);
+  box-shadow: 0 12px 36px rgba(2, 6, 23, 0.35);
 }
 
 .theater-card__head {
@@ -483,10 +504,10 @@
   bottom: 0;
   z-index: 50;
   padding: 0.75rem 1rem calc(0.75rem + env(safe-area-inset-bottom, 0));
-  background: linear-gradient(180deg, rgba(12, 11, 18, 0.65) 0%, rgba(8, 8, 12, 0.98) 40%);
-  border-top: 1px solid rgba(139, 92, 246, 0.25);
-  backdrop-filter: blur(16px);
-  box-shadow: 0 -12px 48px rgba(0, 0, 0, 0.45);
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.82) 0%, rgba(2, 6, 23, 0.96) 45%);
+  border-top: 1px solid rgba(125, 211, 252, 0.22);
+  backdrop-filter: blur(18px);
+  box-shadow: 0 -16px 48px rgba(2, 6, 23, 0.55);
 }
 .selection-bar__inner {
   width: 100%;

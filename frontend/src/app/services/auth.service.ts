@@ -12,6 +12,7 @@ import {
 } from '../models/auth.models';
 
 const USER_STORAGE_KEY = 'auth_user';
+const TOKEN_STORAGE_KEY = 'token';
 
 export function formatAuthHttpError(err: unknown): string {
   if (err instanceof HttpErrorResponse && err.error && typeof err.error === 'object') {
@@ -30,10 +31,19 @@ export function formatAuthHttpError(err: unknown): string {
 @Injectable({ providedIn: 'root' })
 export class AuthService {
   private user = signal<AuthUser | null>(this.readStoredUser());
+  private token = signal<string | null>(this.readStoredToken());
 
   readonly isLoggedInSignal = computed(() => !!this.user());
 
   constructor(private http: HttpClient, private router: Router) {}
+
+  private readStoredToken(): string | null {
+    try {
+      return localStorage.getItem(TOKEN_STORAGE_KEY);
+    } catch {
+      return null;
+    }
+  }
 
   private readStoredUser(): AuthUser | null {
     try {
@@ -55,17 +65,20 @@ export class AuthService {
     return this.http.post<SignupResponse>(`${environment.apiUrl}/auth/signup`, data);
   }
 
-  /** Persists session from API responses (backend does not issue JWT). */
+  /** Persists session and bearer token from login response. */
   setSessionFromLogin(res: LoginResponse) {
     localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(res.user));
+    localStorage.setItem(TOKEN_STORAGE_KEY, res.accessToken);
     this.user.set(res.user);
+    this.token.set(res.accessToken);
   }
 
   logout() {
     localStorage.removeItem(USER_STORAGE_KEY);
-    localStorage.removeItem('token');
+    localStorage.removeItem(TOKEN_STORAGE_KEY);
     localStorage.removeItem('role');
     this.user.set(null);
+    this.token.set(null);
     this.router.navigate(['/login']);
   }
 
@@ -77,9 +90,8 @@ export class AuthService {
     return this.user();
   }
 
-  /** No JWT from API; interceptor skips Authorization when null. */
   getToken(): string | null {
-    return null;
+    return this.token();
   }
 
   isAdmin(): boolean {

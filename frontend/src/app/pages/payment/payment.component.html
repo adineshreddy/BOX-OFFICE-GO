@@ -1,0 +1,46 @@
+<div class="payment-shell">
+  <div class="payment-page">
+    <a [routerLink]="['/movies', movieId(), 'seats']" [queryParams]="{ theaterId: theaterId(), showTime: showTime() }" class="back-link">
+      ← Back to seat selection
+    </a>
+
+    <section class="payment-card">
+      <p class="eyebrow">Secure checkout</p>
+      <h1>Complete your payment</h1>
+      <p class="subtext">Finish payment before the timer ends to lock your seats.</p>
+
+      @if (loading()) {
+        <p class="status">Preparing payment details...</p>
+      } @else {
+        <div class="timer" [class.danger]="remainingSeconds() <= 60">
+          <span class="timer-label">Seats reserved for</span>
+          <span class="timer-value">{{ formattedTimer() }}</span>
+        </div>
+
+        <p class="hold">Hold ID: {{ holdId() }}</p>
+
+        <div class="method-block">
+          <label for="payment-method">Payment method</label>
+          <select id="payment-method" class="input" [ngModel]="paymentMethod()" (ngModelChange)="paymentMethod.set($event)">
+            <option value="card">Credit / Debit card</option>
+            <option value="upi">UPI</option>
+            <option value="netbanking">Net banking</option>
+          </select>
+        </div>
+
+        <button class="pay-btn" type="button" [disabled]="processing() || timedOut() || checkoutCompleted()" (click)="submitPayment()">
+          {{ processing() ? 'Processing...' : checkoutCompleted() ? 'Paid' : 'Pay now' }}
+        </button>
+
+        @if (error()) {
+          <p class="error">{{ error() }}</p>
+        }
+
+        @if (success()) {
+          <p class="success">{{ success() }}</p>
+          <a [routerLink]="['/']" class="home-link">Go to movies</a>
+        }
+      }
+    </section>
+  </div>
+</div>

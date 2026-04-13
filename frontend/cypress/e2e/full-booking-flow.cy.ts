@@ -1,5 +1,9 @@
-describe('Login -> view movie details -> select showtime -> select seats', () => {
-  it('logs in, selects a showtime, then selects seats and continues', () => {
+/**
+ * End-to-end: login → pick showtime → seats → hold → payment → booking confirmation.
+ * All API calls are stubbed so the test does not depend on DB state.
+ */
+describe('Full booking flow: login through payment confirmation', () => {
+  it('logs in, books seats, pays, and reaches booking success', () => {
     const apiBase = 'http://localhost:8080/api/v1';
 
     const user = {
@@ -44,8 +48,6 @@ describe('Login -> view movie details -> select showtime -> select seats', () =>
       ]
     };
 
-    // Seats: create exactly 4 candidate seats (available && not held)
-    // so simulatedSoldSeats picks 0 seats (floor(4*0.2) = 0), removing randomness.
     const seatMap = {
       showtimeId: 'st_001',
       movieTitle: movie.title,
@@ -105,6 +107,8 @@ describe('Login -> view movie details -> select showtime -> select seats', () =>
       ]
     };
 
+    const bookingId = 'bok_e2e_full_001';
+
     cy.intercept('GET', `${apiBase}/movies`, {
       statusCode: 200,
       body: { movies: [movie] }
@@ -150,29 +154,49 @@ describe('Login -> view movie details -> select showtime -> select seats', () =>
     cy.intercept('GET', `${apiBase}/shows/seat-map*`, {
       statusCode: 200,
       body: seatMap
-    }).as('seatMap');
-
-    cy.intercept('POST', `${apiBase}/bookings/holds`, {
-      statusCode: 200,
-      body: {
-        hold: {
-          holdId: 'hold_001',
-          holdExpiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
-          totalAmount: 20
-        }
-      }
-    }).as('hold');
+    }).as('seatMapLoad');
 
     cy.intercept('POST', `${apiBase}/auth/login`, {
       statusCode: 200,
       body: {
         message: 'ok',
-        accessToken: 'test-token',
+        accessToken: 'e2e-test-token',
         tokenType: 'Bearer',
         expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
         user
       }
     }).as('login');
+
+    cy.intercept('POST', `${apiBase}/bookings/holds`, {
+      statusCode: 200,
+      body: {
+        hold: {
+          holdId: 'hold_e2e_001',
+          holdExpiresAt: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+          totalAmount: 20
+        }
+      }
+    }).as('hold');
+
+    cy.intercept('POST', `${apiBase}/bookings/checkout`, {
+      statusCode: 200,
+      body: {
+        message: 'checkout successful',
+        booking: {
+          bookingId,
+          holdId: 'hold_e2e_001',
+          seatNumbers: ['A1', 'A2'],
+          status: 'CONFIRMED',
+          totalAmount: 20
+        }
+      }
+    }).as('checkout');
+
+    cy.intercept('GET', `${apiBase}/bookings/${bookingId}/ticket`, {
+      statusCode: 200,
+      headers: { 'content-type': 'application/pdf' },
+      body: '%PDF-1.4 e2e'
+    }).as('ticketPdf');
 
     cy.visit('/login', {
       onBeforeLoad(win) {
@@ -180,33 +204,36 @@ describe('Login -> view movie details -> select showtime -> select seats', () =>
       }
     });
 
-    // Login page
     cy.get('input[placeholder="you@example.com"]', { timeout: 10000 }).type(user.email);
     cy.get('input[type="password"]', { timeout: 10000 }).type('password123');
     cy.get('button[type="submit"]', { timeout: 10000 }).click();
     cy.wait('@login');
 
-    // Home -> pick the first movie (LoginComponent navigates to '/')
     cy.contains('button', 'Log out', { timeout: 10000 }).should('be.visible');
     cy.get('.movie-card', { timeout: 10000 }).first().click();
 
-    // Movie detail -> select a showtime, then continue to seats
-    cy.get('button.showtime-chip', { timeout: 10000 }).first().should('be.visible').click();
-    cy.get('button.btn-next', { timeout: 10000 }).should('be.visible').click();
+    cy.get('button.showtime-chip', { timeout: 10000 }).first().click();
+    cy.get('button.btn-next', { timeout: 10000 }).click();
     cy.url({ timeout: 10000 }).should('include', '/seats');
 
-    // Seats page: pick ticket count (closes the modal)
     cy.contains('button.ticket-pill', '2', { timeout: 10000 }).click();
-
-    // Select exactly 2 seats.
     cy.get('button.seat[aria-label="Seat A1"]').click();
     cy.get('button.seat[aria-label="Seat A2"]').click();
-
     cy.get('button.btn-confirm').contains('Continue').click();
 
     cy.wait('@hold');
     cy.url({ timeout: 10000 }).should('include', '/payment');
-    cy.contains('Complete your payment').should('be.visible');
+    cy.contains('Complete your payment', { timeout: 10000 }).should('be.visible');
+
+    cy.contains('button', 'Pay now', { timeout: 10000 }).click();
+    cy.wait('@checkout');
+
+    cy.url({ timeout: 10000 }).should('include', `/booking-success/${bookingId}`);
+    cy.contains('Your tickets are locked in!', { timeout: 10000 }).should('be.visible');
+    cy.contains('Booking ID:', { timeout: 10000 }).should('contain.text', bookingId);
+    cy.contains('A1, A2').should('be.visible');
+
+    cy.contains('button', 'Download ticket (PDF)').click();
+    cy.wait('@ticketPdf');
   });
 });
-

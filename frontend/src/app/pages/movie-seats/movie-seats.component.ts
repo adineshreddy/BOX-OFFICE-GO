@@ -49,6 +49,7 @@ export class MovieSeatsComponent implements OnInit {
   holdId = signal<string | null>(null);
 
   pendingHoldAttempted = signal(false);
+  private pageNotice = signal<string | null>(null);
 
   constructor(
     private route: ActivatedRoute,
@@ -65,6 +66,13 @@ export class MovieSeatsComponent implements OnInit {
     this.route.queryParamMap.subscribe(q => {
       this.theaterId.set(q.get('theaterId'));
       this.showTime.set(q.get('showTime'));
+      if (q.get('expired') === '1') {
+        this.pageNotice.set('Your payment timer expired. Seats are available again, please select seats and continue.');
+      } else if (q.get('reason') === 'missing_hold') {
+        this.pageNotice.set('No active hold was found. Please reselect seats to continue.');
+      } else {
+        this.pageNotice.set(null);
+      }
       this.loadSeatExperience();
     });
   }
@@ -89,6 +97,9 @@ export class MovieSeatsComponent implements OnInit {
     this.pendingHoldAttempted.set(false);
     this.selectedSeats.set([]);
     this.ticketPromptOpen.set(true);
+    if (this.pageNotice()) {
+      this.holdError.set(this.pageNotice());
+    }
 
     this.movieService.getShowDetailsBySelection(movieId, theaterId, showTime).subscribe({
       next: details => this.showDetails.set(details),
@@ -239,17 +250,43 @@ export class MovieSeatsComponent implements OnInit {
           this.ticketPromptOpen.set(false);
           this.refreshSeatMap(map.showtimeId);
           this.clearPendingHold();
+          if (hold?.holdId && hold?.holdExpiresAt) {
+            void this.router.navigate(['/movies', this.movieId(), 'payment'], {
+              queryParams: {
+                holdId: hold.holdId,
+                holdExpiresAt: hold.holdExpiresAt,
+                theaterId: this.theaterId(),
+                showTime: this.showTime()
+              }
+            });
+          }
         },
         error: (err: HttpErrorResponse) => {
           this.holdInProgress.set(false);
+          const serverMessage =
+            err.error && typeof err.error === 'object' && typeof err.error.message === 'string'
+              ? err.error.message
+              : null;
           // Another user could have taken the seats between the time they were displayed and this request.
           if (err.status === 409) {
             this.selectionError.set('Some seats were just taken. Please reselect.');
             this.selectedSeats.set([]);
             this.holdError.set(null);
             this.clearPendingHold();
+          } else if (err.status === 401) {
+            const pending: PendingBookingHold = {
+              movieId: this.movieId(),
+              theaterId: this.theaterId() ?? '',
+              showTime: this.showTime() ?? '',
+              showtimeId: map.showtimeId,
+              ticketCount: this.ticketCount(),
+              selectedSeats: selected
+            };
+            localStorage.setItem(PENDING_HOLD_KEY, JSON.stringify(pending));
+            this.holdError.set(serverMessage ?? 'Your session expired. Please sign in again.');
+            void this.router.navigate(['/login'], { queryParams: { from: 'booking' } });
           } else {
-            this.holdError.set('Could not hold seats. Please try again.');
+            this.holdError.set(serverMessage ?? 'Could not hold seats. Please try again.');
             this.clearPendingHold();
           }
           this.refreshSeatMap(map.showtimeId);

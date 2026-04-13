@@ -30,6 +30,7 @@ type bookingRepoHandlerStub struct {
 	getPaymentByIdempotencyFn func(ctx context.Context, key string) (*domain.PaymentTransaction, error)
 	updatePaymentStatusFn     func(ctx context.Context, txnID string, status string, gatewayTxnID string, failureReason string) error
 	getHoldDetailsFn          func(ctx context.Context, holdID string, userID string) (domain.BookingHold, error)
+	releaseHoldFn             func(ctx context.Context, holdID string, userID string) error
 }
 
 func (s *bookingRepoHandlerStub) CleanupExpiredHolds(ctx context.Context) error {
@@ -100,6 +101,12 @@ func (s *bookingRepoHandlerStub) GetHoldDetails(ctx context.Context, holdID stri
 		}, nil
 	}
 	return s.getHoldDetailsFn(ctx, holdID, userID)
+}
+func (s *bookingRepoHandlerStub) ReleaseHold(ctx context.Context, holdID string, userID string) error {
+	if s.releaseHoldFn == nil {
+		return nil
+	}
+	return s.releaseHoldFn(ctx, holdID, userID)
 }
 
 // ── gateway stub ─────────────────────────────────────────────────────
@@ -432,5 +439,44 @@ func TestCheckoutHandler_MissingIdempotencyKey_Returns400(t *testing.T) {
 	h.CheckoutBookingHold(rec, req)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestReleaseBookingHold_Success(t *testing.T) {
+	h := newBookingHandlerForTest(&bookingRepoHandlerStub{
+		releaseHoldFn: func(_ context.Context, holdID string, userID string) error {
+			if holdID != "hold_1" || userID != "usr_1" {
+				t.Fatalf("unexpected params holdID=%s userID=%s", holdID, userID)
+			}
+			return nil
+		},
+	})
+	mux := http.NewServeMux()
+	mux.HandleFunc("DELETE /api/v1/bookings/holds/{holdId}", h.ReleaseBookingHold)
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/bookings/holds/hold_1", nil)
+	req = withAuth(req, "usr_1")
+	rec := httptest.NewRecorder()
+
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestReleaseBookingHold_AlreadyReleased(t *testing.T) {
+	h := newBookingHandlerForTest(&bookingRepoHandlerStub{
+		releaseHoldFn: func(_ context.Context, _ string, _ string) error {
+			return repository.ErrHoldAlreadyReleased
+		},
+	})
+	mux := http.NewServeMux()
+	mux.HandleFunc("DELETE /api/v1/bookings/holds/{holdId}", h.ReleaseBookingHold)
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/bookings/holds/hold_1", nil)
+	req = withAuth(req, "usr_1")
+	rec := httptest.NewRecorder()
+
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("expected 409, got %d body=%s", rec.Code, rec.Body.String())
 	}
 }

@@ -12,6 +12,16 @@ export const routes: Routes = [
       import('./pages/movie-seats/movie-seats.component').then(m => m.MovieSeatsComponent)
   },
   {
+    path: 'movies/:movieId/payment',
+    loadComponent: () =>
+      import('./pages/payment/payment.component').then(m => m.PaymentComponent)
+  },
+  {
+    path: 'movies/:movieId/booking-success/:bookingId',
+    loadComponent: () =>
+      import('./pages/booking-success/booking-success.component').then(m => m.BookingSuccessComponent)
+  },
+  {
     path: 'movies/:movieId',
     loadComponent: () =>
       import('./pages/movie-detail/movie-detail.component').then(m => m.MovieDetailComponent)
