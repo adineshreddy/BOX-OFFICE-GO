@@ -2,6 +2,8 @@
 
 GitHub Link: https://github.com/adineshreddy/BOX-OFFICE-GO
 
+Sprint3 Demo link: https://youtu.be/zyMIKqXXsCo
+
 ## Sprint Overview
 Sprint 3 focused on backend security and post-seat-selection completion flows.
 
