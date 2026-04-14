@@ -235,3 +235,96 @@ Not confirmed (`409`):
 - Auth config support:
   - `JWT_SECRET` (default: `dev-secret-change-me`)
   - `AUTH_TOKEN_TTL_MINUTES` (default: `1440`)
+
+---
+
+## Sprint 2 carryover and Sprint 3 completion
+
+Sprint 2 left the booking journey through seat hold in place; Sprint 3 completes **post-hold** flows with **auth**, **payment-aware checkout**, **hold release**, and **ticket download**, plus tests for those paths.
+
+---
+
+## Frontend unit tests (Sprint 2 baseline + Sprint 3 additions)
+
+**Location:** `frontend/src/**/*.spec.ts`
+
+**Snapshot (verified locally):** 7 test files, **13** tests passing.
+
+| File | Notes |
+|------|--------|
+| `frontend/src/app/app.spec.ts` | App shell / routing smoke |
+| `frontend/src/app/services/auth.service.spec.ts` | Auth service behavior |
+| `frontend/src/app/services/movie.service.spec.ts` | Movie API client |
+| `frontend/src/app/pages/movie-detail/movie-detail.component.spec.ts` | Movie detail |
+| `frontend/src/app/pages/movie-seats/movie-seats.component.spec.ts` | Seat selection |
+| `frontend/src/app/pages/payment/payment.component.spec.ts` | **Sprint 3:** payment / checkout UI |
+| `frontend/src/app/pages/booking-success/booking-success.component.spec.ts` | **Sprint 3:** post-checkout success |
+
+**How to run (shows all unit test results in the terminal):**
+
+```bash
+cd frontend
+npm test
+```
+
+Use `npm test -- --watch=false` if your environment supports a non-watch single run (Angular 21 + Vitest may still open the test runner depending on CLI defaults; for the narrated demo, a full green run of `npm test` is acceptable).
+
+---
+
+## Backend unit tests (Sprint 2 baseline + Sprint 3 additions)
+
+**How to run (entire suite):**
+
+```bash
+cd backend
+go test ./...
+```
+
+Verbose (good for screen recording):
+
+```bash
+go test -v ./...
+```
+
+**Test files (15 files, `*_test.go`):**
+
+| Package / path |
+|----------------|
+| `backend/internal/config/config_test.go` |
+| `backend/internal/handler/auth_handler_test.go` |
+| `backend/internal/handler/auth_handler_extra_test.go` |
+| `backend/internal/handler/booking_handler_test.go` |
+| `backend/internal/handler/movie_handler_test.go` |
+| `backend/internal/handler/movie_handler_extra_test.go` |
+| `backend/internal/http/middleware/auth_test.go` |
+| `backend/internal/http/middleware/cors_test.go` |
+| `backend/internal/http/response/response_test.go` |
+| `backend/internal/payment/gateway_test.go` |
+| `backend/internal/service/auth_service_test.go` |
+| `backend/internal/service/booking_service_test.go` |
+| `backend/internal/service/movie_service_test.go` |
+| `backend/internal/validation/login_validation_test.go` |
+| `backend/internal/validation/signup_validation_test.go` |
+
+Sprint 3-related coverage includes middleware auth, payment gateway behavior, checkout idempotency/decline/timeout paths, ticket PDF service checks, and extended booking/auth handler tests.
+
+---
+
+## Backend API documentation (updated for Sprint 3)
+
+Use these together for a full picture:
+
+1. **`Sprint2.md`** (in repo root next to this file) — complete **baseline** REST reference for movies, shows, seat map, holds (pre–Sprint 3 contract where `userId` was passed on holds), checkout (pre-payment), and booking list/cancel. Still useful for **status tables**, **curl** examples, and **FE integration notes**; **auth and booking hold/checkout contracts changed in Sprint 3** (see below).
+
+2. **`backend/README.md`** — quick start, env vars (`JWT_SECRET`, `AUTH_TOKEN_TTL_MINUTES`), signup/login curl (login response includes **access token** fields), movies/theaters, and **authenticated** cancel booking example.
+
+3. **This document (`Sprint3.md`)** — **Sprint 3 deltas:** `POST /api/v1/auth/logout`, Bearer protection on booking routes, hold body without trusted client `userId`, `DELETE /api/v1/bookings/holds/{holdId}`, payment-aware `POST /api/v1/bookings/checkout`, and `GET /api/v1/bookings/{bookingId}/ticket` (PDF).
+
+---
+
+## Submission checklist (course requirements)
+
+- [ ] **GitHub:** repo link on the submission page (update if the fork/org changed).
+- [ ] **Video:** narrated; **each teammate narrates a segment**; demo **new Sprint 3 functionality**; show **all unit tests** — run **frontend** (`npm test` in `frontend`) and **backend** (`go test ./...` or `go test -v ./...` in `backend`) with results visible.
+- [ ] **Commits:** everyone needs **individual commits** on the branch you submit; coordinate with your TA if contribution is blocked.
+- [ ] **This file:** keep `Sprint3.md` accurate (work completed, test lists, doc pointers above).
