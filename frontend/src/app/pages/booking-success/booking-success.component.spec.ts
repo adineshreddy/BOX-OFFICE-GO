@@ -23,11 +23,14 @@ function createRouteStub() {
   } as any;
 }
 
+const toastStub = { show: vi.fn() };
+
 describe('BookingSuccessComponent', () => {
   it('parses booking route/query data on init', () => {
     const component = new BookingSuccessComponent(
       createRouteStub(),
-      { downloadTicket: vi.fn().mockReturnValue(of(new Blob(['pdf'], { type: 'application/pdf' }))) } as any
+      { downloadTicket: vi.fn().mockReturnValue(of(new Blob(['pdf'], { type: 'application/pdf' }))) } as any,
+      toastStub as any
     );
 
     expect(component.movieId()).toBe('mov_001');
@@ -39,7 +42,8 @@ describe('BookingSuccessComponent', () => {
   it('sets error when ticket download fails', () => {
     const component = new BookingSuccessComponent(
       createRouteStub(),
-      { downloadTicket: vi.fn().mockReturnValue(throwError(() => new Error('fail'))) } as any
+      { downloadTicket: vi.fn().mockReturnValue(throwError(() => new Error('fail'))) } as any,
+      toastStub as any
     );
 
     component.downloadTicket();

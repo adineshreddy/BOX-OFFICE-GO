@@ -1,0 +1,234 @@
+.bookings-page {
+  position: relative;
+  min-height: calc(100vh - 70px);
+  padding: 1.25rem clamp(1rem, 3vw, 2.5rem) 2.5rem;
+  color: #f8fafc;
+}
+
+.bookings-page::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(circle at 12% 18%, rgba(124, 58, 237, 0.18), transparent 42%),
+    radial-gradient(circle at 90% 80%, rgba(34, 197, 94, 0.12), transparent 45%),
+    linear-gradient(160deg, #020617 0%, #0f172a 50%, #0b1220 100%);
+  z-index: -1;
+}
+
+.page-nav {
+  margin-bottom: 1rem;
+}
+
+.back-link {
+  color: #93c5fd;
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.back-link:hover {
+  text-decoration: underline;
+}
+
+.page-header {
+  margin-bottom: 1.5rem;
+}
+
+.page-header h1 {
+  margin: 0 0 0.35rem;
+  font-size: clamp(1.5rem, 3vw, 2rem);
+  letter-spacing: -0.02em;
+}
+
+.lede {
+  margin: 0;
+  color: #94a3b8;
+  font-size: 0.95rem;
+}
+
+.status {
+  color: #cbd5e1;
+}
+
+.status.error {
+  color: #fecaca;
+}
+
+.retry-btn {
+  margin-top: 0.75rem;
+  padding: 0.5rem 1rem;
+  border-radius: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: rgba(30, 41, 59, 0.8);
+  color: #e2e8f0;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.empty-card {
+  max-width: 420px;
+  padding: 1.5rem;
+  border-radius: 16px;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  background: rgba(15, 23, 42, 0.65);
+}
+
+.empty-card p {
+  margin: 0 0 1rem;
+  color: #cbd5e1;
+}
+
+.cta-link {
+  color: #a78bfa;
+  font-weight: 700;
+}
+
+.banner-error {
+  margin: 0 0 1rem;
+  padding: 0.65rem 0.85rem;
+  border-radius: 10px;
+  background: rgba(127, 29, 29, 0.35);
+  border: 1px solid rgba(252, 165, 165, 0.35);
+  color: #fecaca;
+}
+
+.booking-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.booking-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 1rem;
+  align-items: start;
+  padding: 1.15rem 1.25rem;
+  border-radius: 18px;
+  border: 1px solid rgba(125, 211, 252, 0.22);
+  background: linear-gradient(165deg, rgba(15, 23, 42, 0.92), rgba(30, 41, 59, 0.85));
+  box-shadow: 0 16px 40px rgba(2, 6, 23, 0.35);
+}
+
+.card-main h2 {
+  margin: 0;
+  font-size: 1.15rem;
+  line-height: 1.3;
+}
+
+.title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  margin-bottom: 0.35rem;
+}
+
+.status-pill {
+  font-size: 0.7rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.25);
+  color: #e2e8f0;
+}
+
+.status-pill--confirmed {
+  background: rgba(34, 197, 94, 0.25);
+  color: #86efac;
+}
+
+.status-pill--muted {
+  opacity: 0.9;
+}
+
+.theater-line {
+  margin: 0.25rem 0 0;
+  color: #cbd5e1;
+  font-weight: 600;
+}
+
+.meta-line {
+  margin: 0.35rem 0 0;
+  color: #e2e8f0;
+  font-size: 0.9rem;
+}
+
+.meta-line.subtle {
+  color: #94a3b8;
+  font-size: 0.82rem;
+}
+
+.meta-line .label {
+  color: #94a3b8;
+  margin-right: 0.25rem;
+}
+
+.id-line {
+  margin: 0.65rem 0 0;
+  font-size: 0.78rem;
+  color: #64748b;
+  font-family: ui-monospace, monospace;
+}
+
+.card-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 160px;
+}
+
+.btn-download {
+  padding: 0.55rem 0.85rem;
+  border: 0;
+  border-radius: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+  color: #fff;
+  box-shadow: 0 8px 20px rgba(22, 163, 74, 0.3);
+}
+
+.btn-download:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-cancel {
+  padding: 0.5rem 0.85rem;
+  border-radius: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid rgba(248, 113, 113, 0.45);
+  background: rgba(127, 29, 29, 0.25);
+  color: #fecaca;
+}
+
+.btn-cancel:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.no-actions {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #94a3b8;
+}
+
+@media (max-width: 720px) {
+  .booking-card {
+    grid-template-columns: 1fr;
+  }
+
+  .card-actions {
+    flex-direction: row;
+    flex-wrap: wrap;
+    min-width: unset;
+  }
+}

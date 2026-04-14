@@ -15,11 +15,19 @@ const USER_STORAGE_KEY = 'auth_user';
 const TOKEN_STORAGE_KEY = 'token';
 
 export function formatAuthHttpError(err: unknown): string {
-  if (err instanceof HttpErrorResponse && err.error && typeof err.error === 'object') {
-    const e = err.error as { message?: string; fields?: Record<string, string> };
-    const fieldText = e.fields ? Object.values(e.fields).join(' ') : '';
-    if (e.message || fieldText) {
-      return [e.message, fieldText].filter(Boolean).join(' ');
+  if (err instanceof HttpErrorResponse) {
+    if (err.status === 0) {
+      return 'Cannot reach the server. Is the API running on port 8080?';
+    }
+    if (err.error && typeof err.error === 'object' && !Array.isArray(err.error)) {
+      const e = err.error as { message?: string; fields?: Record<string, string> };
+      const fieldText = e.fields ? Object.values(e.fields).join(' ') : '';
+      if (e.message || fieldText) {
+        return [e.message, fieldText].filter(Boolean).join(' ');
+      }
+    }
+    if (typeof err.error === 'string' && err.error.trim()) {
+      return err.error.trim();
     }
   }
   if (err instanceof Error) {
@@ -73,13 +81,27 @@ export class AuthService {
     this.token.set(res.accessToken);
   }
 
+  /** Clears local session; revokes token on the server when possible. */
   logout() {
-    localStorage.removeItem(USER_STORAGE_KEY);
-    localStorage.removeItem(TOKEN_STORAGE_KEY);
-    localStorage.removeItem('role');
-    this.user.set(null);
-    this.token.set(null);
-    this.router.navigate(['/login']);
+    const finish = () => {
+      localStorage.removeItem(USER_STORAGE_KEY);
+      localStorage.removeItem(TOKEN_STORAGE_KEY);
+      localStorage.removeItem('role');
+      this.user.set(null);
+      this.token.set(null);
+      void this.router.navigate(['/login']);
+    };
+
+    const token = this.readStoredToken();
+    if (!token) {
+      finish();
+      return;
+    }
+
+    this.http.post<{ message: string }>(`${environment.apiUrl}/auth/logout`, {}).subscribe({
+      next: () => finish(),
+      error: () => finish()
+    });
   }
 
   isLoggedIn(): boolean {

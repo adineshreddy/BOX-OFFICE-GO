@@ -18,7 +18,7 @@
       <span>Phone</span>
       <input type="tel" formControlName="phone" placeholder="+919876543210" autocomplete="tel" />
       @if (form.get('phone')?.invalid && form.get('phone')?.touched) {
-        <span class="field-error">8–15 digits, optional leading +</span>
+        <span class="field-error">8–15 digits (spaces, dashes, and + are OK)</span>
       }
     </label>
     <label>
