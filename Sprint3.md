@@ -13,6 +13,37 @@ All 4 backend stories are now implemented:
 
 ---
 
+## Sprint 3 Frontend Scope (Completed)
+
+Sprint 3 frontend work focused on completing the post-seat-selection user journey and aligning the UI with the updated auth + booking contracts.
+
+### 1) My Bookings page (new) + ticket download UX
+- Added **My Bookings** route (`/bookings`) to list the logged-in user’s bookings.
+- Added **PDF ticket download** flow with success feedback.
+- Added **cancel booking** flow with confirmation; cancel is hidden/disabled after showtime.
+
+### 2) Routing + navigation
+- Protected `/bookings` behind an auth guard.
+- Added header link to **My Bookings** with active state styling.
+
+### 3) Booking API alignment (contract updates)
+- Booking service aligned to protected endpoints:
+  - `GET /api/v1/bookings`
+  - `DELETE /api/v1/bookings?bookingId=...`
+- Hold/checkout payloads aligned to Sprint 3 backend (no client-trusted `userId` in request body).
+
+### 4) Auth UX improvements
+- Clearer HTTP error handling (including network errors / `status === 0`).
+- Logout now calls `POST /api/v1/auth/logout` then clears client storage.
+- Signup improvements: phone normalization + validators.
+- Login redirect improvement: `from=bookings` redirects to `/bookings` after auth.
+
+### 5) Home UX: See All behavior
+- “See All” works when logged in (expand catalog / show less).
+
+### Frontend story coverage note (FE-05)
+- **FE-05 (payment functionality after seat selection)** is covered via the **payment / checkout UI** and the updated booking contract alignment above (see unit test file list below, including `payment.component.spec.ts`).
+
 ## Sprint 3 Backend Scope (Completed)
 
 ### 1) Auth Sessions + Logout (BE-05)
@@ -321,10 +352,3 @@ Use these together for a full picture:
 3. **This document (`Sprint3.md`)** — **Sprint 3 deltas:** `POST /api/v1/auth/logout`, Bearer protection on booking routes, hold body without trusted client `userId`, `DELETE /api/v1/bookings/holds/{holdId}`, payment-aware `POST /api/v1/bookings/checkout`, and `GET /api/v1/bookings/{bookingId}/ticket` (PDF).
 
 ---
-
-## Submission checklist (course requirements)
-
-- [ ] **GitHub:** repo link on the submission page (update if the fork/org changed).
-- [ ] **Video:** narrated; **each teammate narrates a segment**; demo **new Sprint 3 functionality**; show **all unit tests** — run **frontend** (`npm test` in `frontend`) and **backend** (`go test ./...` or `go test -v ./...` in `backend`) with results visible.
-- [ ] **Commits:** everyone needs **individual commits** on the branch you submit; coordinate with your TA if contribution is blocked.
-- [ ] **This file:** keep `Sprint3.md` accurate (work completed, test lists, doc pointers above).
