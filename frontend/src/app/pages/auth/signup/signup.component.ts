@@ -21,6 +21,23 @@ function passwordsMatchValidator(group: AbstractControl): ValidationErrors | nul
   return p === c ? null : { passwordMismatch: true };
 }
 
+/** Digits only; matches backend NormalizePhone. */
+function normalizePhoneDigits(raw: string): string {
+  return raw.replace(/\D/g, '');
+}
+
+function phoneDigitsValidator(control: AbstractControl): ValidationErrors | null {
+  const raw = (control.value as string) ?? '';
+  if (!raw.trim()) {
+    return null;
+  }
+  const digits = normalizePhoneDigits(raw);
+  if (digits.length < 8 || digits.length > 15) {
+    return { phoneDigits: true };
+  }
+  return null;
+}
+
 @Component({
   selector: 'app-signup',
   standalone: true,
@@ -41,7 +58,7 @@ export class SignupComponent {
     this.form = this.fb.nonNullable.group(
       {
         name: ['', [Validators.required, Validators.minLength(2)]],
-        phone: ['', [Validators.required, Validators.pattern(/^[0-9+]{8,15}$/)]],
+        phone: ['', [Validators.required, phoneDigitsValidator]],
         email: ['', [Validators.required, Validators.email]],
         password: ['', [Validators.required, Validators.minLength(8)]],
         confirmPassword: ['', Validators.required]
@@ -58,11 +75,12 @@ export class SignupComponent {
     this.error = '';
     this.loading = true;
     const v = this.form.getRawValue();
+    const email = v.email.trim();
     this.auth
       .signup({
-        name: v.name,
-        phone: v.phone,
-        email: v.email,
+        name: v.name.trim(),
+        phone: normalizePhoneDigits(v.phone),
+        email,
         password: v.password,
         confirmPassword: v.confirmPassword
       })

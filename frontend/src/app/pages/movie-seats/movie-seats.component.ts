@@ -236,7 +236,6 @@ export class MovieSeatsComponent implements OnInit {
     this.holdInProgress.set(true);
     this.bookingService
       .createBookingHold({
-        userId: user.id,
         showtimeId: map.showtimeId,
         seatNumbers: selected
       })

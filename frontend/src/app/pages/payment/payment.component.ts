@@ -87,7 +87,6 @@ export class PaymentComponent implements OnInit, OnDestroy {
     this.bookingService
       .checkoutBookingHold({
         holdId,
-        userId: user.id,
         paymentMethod: this.paymentMethod(),
         idempotencyKey: this.newIdempotencyKey()
       })

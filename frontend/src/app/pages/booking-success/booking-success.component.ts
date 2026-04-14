@@ -2,6 +2,7 @@ import { CommonModule } from '@angular/common';
 import { Component, signal } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { BookingService } from '../../services/booking.service';
+import { ToastService } from '../../services/toast.service';
 
 @Component({
   selector: 'app-booking-success',
@@ -21,7 +22,8 @@ export class BookingSuccessComponent {
 
   constructor(
     private route: ActivatedRoute,
-    private bookingService: BookingService
+    private bookingService: BookingService,
+    private toast: ToastService
   ) {
     this.route.paramMap.subscribe(pm => {
       this.movieId.set(pm.get('movieId') ?? '');
@@ -62,6 +64,7 @@ export class BookingSuccessComponent {
         anchor.click();
         anchor.remove();
         window.URL.revokeObjectURL(url);
+        this.toast.show('Ticket downloaded');
       },
       error: () => {
         this.downloading.set(false);

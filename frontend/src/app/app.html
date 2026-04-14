@@ -5,6 +5,7 @@
   </a>
   <nav class="auth-nav">
     @if (auth.isLoggedInSignal()) {
+      <a routerLink="/bookings" class="btn btn-ghost" routerLinkActive="active-nav">My bookings</a>
       <button type="button" class="btn btn-ghost" (click)="auth.logout()">Log out</button>
     } @else {
       <a routerLink="/login" class="btn btn-ghost">Sign in</a>
@@ -107,6 +108,11 @@
   .auth-nav .btn-ghost:active {
     transform: translateY(0);
   }
+  .auth-nav a.btn.active-nav {
+    color: #fff;
+    background: rgba(167, 139, 250, 0.2);
+    border-color: rgba(167, 139, 250, 0.35);
+  }
 </style>
 
 <style>
@@ -119,4 +125,5 @@
   }
 </style>
 
+<app-toast />
 <router-outlet />

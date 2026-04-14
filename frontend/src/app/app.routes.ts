@@ -1,10 +1,17 @@
 import { Routes } from '@angular/router';
+import { authGuard } from './core/guards/auth.guard';
 
 export const routes: Routes = [
   {
     path: '',
     loadComponent: () =>
       import('./pages/home/home.component').then(m => m.HomeComponent)
+  },
+  {
+    path: 'bookings',
+    canActivate: [authGuard],
+    loadComponent: () =>
+      import('./pages/my-bookings/my-bookings.component').then(m => m.MyBookingsComponent)
   },
   {
     path: 'movies/:movieId/seats',

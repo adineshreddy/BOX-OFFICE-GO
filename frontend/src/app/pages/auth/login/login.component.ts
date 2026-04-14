@@ -33,6 +33,10 @@ export class LoginComponent {
         this.signInMessage = 'Account created. Please sign in.';
       } else if (params['from'] === 'see-all-movies') {
         this.signInMessage = 'Sign in to browse the full movie catalog.';
+      } else if (params['from'] === 'booking') {
+        this.signInMessage = 'Sign in to continue booking your seats.';
+      } else if (params['from'] === 'bookings') {
+        this.signInMessage = 'Sign in to view your bookings.';
       } else {
         this.signInMessage = '';
       }
@@ -70,6 +74,10 @@ export class LoginComponent {
           } catch {
             // If parsing fails, fall back to default behavior.
           }
+        }
+        if (this.route.snapshot.queryParamMap.get('from') === 'bookings') {
+          void this.router.navigate(['/bookings']);
+          return;
         }
         void this.router.navigate(['/']);
       },
