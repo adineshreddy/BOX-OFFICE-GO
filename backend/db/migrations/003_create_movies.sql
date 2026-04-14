@@ -37,7 +37,7 @@ VALUES
         128,
         '2024-06-14',
         8.4,
-        'https://image.tmdb.org/t/p/w500/gEU2QniE6E77NI6lCU6MxlNBvIx.jpg',
+        'https://placehold.co/500x750/0c1222/7dd3fc/png?text=Starlight+Horizon',
         TRUE,
         NOW(),
         NOW()
@@ -51,7 +51,7 @@ VALUES
         112,
         '2023-11-03',
         7.6,
-        'https://example.com/posters/monsoon-diaries.jpg',
+        'https://placehold.co/500x750/0f1f1a/86efac/png?text=Monsoon+Diaries',
         TRUE,
         NOW(),
         NOW()
@@ -65,7 +65,7 @@ VALUES
         121,
         '2024-02-09',
         8.1,
-        'https://image.tmdb.org/t/p/w500/arw2vcBveWOVZr6pxd9XTd1TdQa.jpg',
+        'https://placehold.co/500x750/1a0f14/fbcfe8/png?text=The+Last+Ticket',
         TRUE,
         NOW(),
         NOW()

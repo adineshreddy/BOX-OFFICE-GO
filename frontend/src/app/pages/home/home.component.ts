@@ -1,7 +1,8 @@
-import { Component, OnInit, OnDestroy, signal, computed } from '@angular/core';
+import { Component, OnInit, OnDestroy, inject, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router, RouterLink } from '@angular/router';
 import { MovieService } from '../../services/movie.service';
+import { AuthService } from '../../services/auth.service';
 import { ApiMovie } from '../../models/movie.models';
 
 @Component({
@@ -12,9 +13,15 @@ import { ApiMovie } from '../../models/movie.models';
   styleUrl: './home.component.scss'
 })
 export class HomeComponent implements OnInit, OnDestroy {
+  private readonly router = inject(Router);
+  private readonly movieService = inject(MovieService);
+  readonly auth = inject(AuthService);
+
   currentHeroIndex = signal(0);
   currentMoviePage = signal(0);
   moviesPerPage = 5;
+  /** When signed in, "See All" expands the row instead of sending users to login. */
+  catalogExpanded = signal(false);
   private autoRotateInterval?: number;
 
   movies = signal<ApiMovie[]>([]);
@@ -23,17 +30,26 @@ export class HomeComponent implements OnInit, OnDestroy {
 
   visibleMovies = computed(() => {
     const list = this.movies();
+    if (this.catalogExpanded()) {
+      return list;
+    }
     const start = this.currentMoviePage() * this.moviesPerPage;
     const end = start + this.moviesPerPage;
     return list.slice(start, end);
   });
 
   canGoNext = computed(() => {
+    if (this.catalogExpanded()) {
+      return false;
+    }
     const list = this.movies();
     return (this.currentMoviePage() + 1) * this.moviesPerPage < list.length;
   });
 
   canGoPrev = computed(() => {
+    if (this.catalogExpanded()) {
+      return false;
+    }
     return this.currentMoviePage() > 0;
   });
 
@@ -58,11 +74,6 @@ export class HomeComponent implements OnInit, OnDestroy {
       emoji: '🎂💕'
     }
   ];
-
-  constructor(
-    private router: Router,
-    private movieService: MovieService
-  ) {}
 
   ngOnInit() {
     this.startAutoRotate();
@@ -161,7 +172,12 @@ export class HomeComponent implements OnInit, OnDestroy {
     }
   }
 
-  goToSignIn() {
-    this.router.navigate(['/login'], { queryParams: { from: 'see-all-movies' } });
+  onSeeAllClick(event: Event) {
+    event.preventDefault();
+    if (this.auth.isLoggedIn()) {
+      this.catalogExpanded.update(v => !v);
+      return;
+    }
+    void this.router.navigate(['/login'], { queryParams: { from: 'see-all-movies' } });
   }
 }

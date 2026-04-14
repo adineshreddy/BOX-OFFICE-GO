@@ -86,7 +86,13 @@
   <section class="recommended-section">
     <div class="section-header">
       <h2 class="section-title">Recommended Movies</h2>
-      <a (click)="goToSignIn()" class="see-all-link">See All &gt;</a>
+      <button type="button" class="see-all-link" (click)="onSeeAllClick($event)">
+        @if (auth.isLoggedInSignal() && catalogExpanded()) {
+          Show less
+        } @else {
+          See All &gt;
+        }
+      </button>
     </div>
 
     <div class="movies-container">

@@ -130,6 +130,31 @@ func TestAuthServiceSignup_Success(t *testing.T) {
 	if user.ID == "" || user.Email != "dinesh@example.com" {
 		t.Fatalf("unexpected user created: %+v", user)
 	}
+	if user.Phone != "1234567890" {
+		t.Fatalf("expected normalized phone, got %q", user.Phone)
+	}
+}
+
+func TestAuthServiceSignup_StoresNormalizedFormattedPhone(t *testing.T) {
+	svc := NewAuthService(&authUserRepoStub{
+		createFn: func(_ context.Context, user domain.User) (domain.User, error) {
+			return user, nil
+		},
+	})
+
+	user, validationErrs, err := svc.Signup(context.Background(), domain.SignupInput{
+		Name:            "Dinesh",
+		Phone:           "+1 (555) 123-4567",
+		Email:           "dinesh@example.com",
+		Password:        "password123",
+		ConfirmPassword: "password123",
+	})
+	if err != nil || len(validationErrs) != 0 {
+		t.Fatalf("signup failed: err=%v errs=%v", err, validationErrs)
+	}
+	if user.Phone != "15551234567" {
+		t.Fatalf("expected digits-only phone, got %q", user.Phone)
+	}
 }
 
 func TestAuthServiceLogin_UserNotFound(t *testing.T) {

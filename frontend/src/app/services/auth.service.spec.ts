@@ -1,6 +1,7 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { HttpClientTestingModule } from '@angular/common/http/testing';
+import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
+import { environment } from '../../environments/environment';
 import { Router } from '@angular/router';
 import { vi } from 'vitest';
 import { AuthService, formatAuthHttpError } from './auth.service';
@@ -55,6 +56,7 @@ describe('AuthService', () => {
 
   let service: AuthService;
   let routerNavigate: ReturnType<typeof vi.fn>;
+  let httpMock: HttpTestingController;
 
   beforeEach(async () => {
     ensureLocalStorage();
@@ -70,6 +72,11 @@ describe('AuthService', () => {
     }).compileComponents();
 
     service = TestBed.inject(AuthService);
+    httpMock = TestBed.inject(HttpTestingController);
+  });
+
+  afterEach(() => {
+    httpMock.verify();
   });
 
   it('setSessionFromLogin persists user and updates the signal', () => {
@@ -110,6 +117,10 @@ describe('AuthService', () => {
     globalThis.localStorage.setItem('role', 'admin');
 
     service.logout();
+
+    const req = httpMock.expectOne(`${environment.apiUrl}/auth/logout`);
+    expect(req.request.method).toBe('POST');
+    req.flush({ message: 'logout successful' });
 
     expect(globalThis.localStorage.getItem(USER_STORAGE_KEY)).toBeNull();
     expect(globalThis.localStorage.getItem('token')).toBeNull();
