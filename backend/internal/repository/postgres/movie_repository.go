@@ -183,6 +183,7 @@ func (r *MovieRepository) ListMovieShowtimeRecords(ctx context.Context, movieID 
 	  AND t.is_active = TRUE
 	  AND s.is_active = TRUE
 	  AND (s.start_time AT TIME ZONE 'America/New_York')::date >= (NOW() AT TIME ZONE 'America/New_York')::date
+	  AND s.start_time > NOW()
 	`
 
 	args := []any{strings.TrimSpace(movieID)}

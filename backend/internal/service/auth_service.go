@@ -75,7 +75,7 @@ func (s *AuthService) Signup(ctx context.Context, input domain.SignupInput) (dom
 	user := domain.User{
 		ID:           fmt.Sprintf("usr_%d", time.Now().UnixNano()),
 		Name:         strings.TrimSpace(input.Name),
-		Phone:        strings.TrimSpace(input.Phone),
+		Phone:        validation.NormalizePhone(input.Phone),
 		Email:        strings.ToLower(strings.TrimSpace(input.Email)),
 		PasswordHash: string(hashedPassword),
 		IsAdmin:      false,

@@ -48,15 +48,20 @@ func (r *BookingRepository) CreateHold(ctx context.Context, input domain.CreateB
 	defer tx.Rollback()
 
 	var basePrice float64
+	var showStart time.Time
 	if err := tx.QueryRowContext(
 		ctx,
-		`SELECT base_price FROM showtimes WHERE id = $1 AND is_active = TRUE`,
+		`SELECT base_price, start_time FROM showtimes WHERE id = $1 AND is_active = TRUE`,
 		input.ShowtimeID,
-	).Scan(&basePrice); err != nil {
+	).Scan(&basePrice, &showStart); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return domain.BookingHold{}, repository.ErrShowtimeNotFound
 		}
 		return domain.BookingHold{}, err
+	}
+
+	if !showStart.After(time.Now().UTC()) {
+		return domain.BookingHold{}, repository.ErrShowtimeStarted
 	}
 
 	seatState := make(map[string]struct {
@@ -396,12 +401,16 @@ func (r *BookingRepository) CancelBooking(ctx context.Context, bookingID string,
 
 	var status string
 	var holdID string
-	var showtimeID string
+	var showStart time.Time
 
 	err = tx.QueryRowContext(ctx,
-		`SELECT status, hold_id, showtime_id FROM bookings WHERE id = $1 AND user_id = $2 FOR UPDATE`,
+		`SELECT b.status, b.hold_id, s.start_time
+		 FROM bookings b
+		 JOIN showtimes s ON s.id = b.showtime_id
+		 WHERE b.id = $1 AND b.user_id = $2
+		 FOR UPDATE OF b`,
 		bookingID, userID,
-	).Scan(&status, &holdID, &showtimeID)
+	).Scan(&status, &holdID, &showStart)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return repository.ErrBookingNotFound
@@ -414,6 +423,9 @@ func (r *BookingRepository) CancelBooking(ctx context.Context, bookingID string,
 	}
 
 	now := time.Now().UTC()
+	if !showStart.After(now) {
+		return repository.ErrShowtimeStarted
+	}
 
 	// Cancel the booking
 	if _, err := tx.ExecContext(ctx,

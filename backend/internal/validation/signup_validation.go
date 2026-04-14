@@ -2,26 +2,38 @@ package validation
 
 import (
 	"net/mail"
-	"regexp"
 	"strings"
+	"unicode"
 
 	"box-office-go/backend/internal/domain"
 )
 
-var phoneRegex = regexp.MustCompile(`^[0-9+]{8,15}$`)
+// NormalizePhone strips formatting; keeps digits only (E.164-style input with +, spaces, dashes, etc.).
+func NormalizePhone(raw string) string {
+	var b strings.Builder
+	for _, r := range raw {
+		if unicode.IsDigit(r) {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
 
 func ValidateSignupInput(input domain.SignupInput) map[string]string {
 	errors := make(map[string]string)
 
-	if strings.TrimSpace(input.Name) == "" {
+	name := strings.TrimSpace(input.Name)
+	if name == "" {
 		errors["name"] = "name is required"
+	} else if len(name) < 2 {
+		errors["name"] = "name must be at least 2 characters"
 	}
 
-	phone := strings.TrimSpace(input.Phone)
+	phone := NormalizePhone(input.Phone)
 	if phone == "" {
 		errors["phone"] = "phone is required"
-	} else if !phoneRegex.MatchString(phone) {
-		errors["phone"] = "phone must be 8-15 chars and only digits/+"
+	} else if len(phone) < 8 || len(phone) > 15 {
+		errors["phone"] = "phone must be 8-15 digits (country code included)"
 	}
 
 	email := strings.TrimSpace(input.Email)
