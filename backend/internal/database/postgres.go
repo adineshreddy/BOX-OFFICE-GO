@@ -265,7 +265,7 @@ func ensureSchema(ctx context.Context, db *sql.DB) error {
 			128,
 			'2024-06-14',
 			8.4,
-			'https://image.tmdb.org/t/p/w500/gEU2QniE6E77NI6lCU6MxlNBvIx.jpg',
+			'https://placehold.co/500x750/0c1222/7dd3fc/png?text=Starlight+Horizon',
 			TRUE,
 			NOW(),
 			NOW()
@@ -279,7 +279,7 @@ func ensureSchema(ctx context.Context, db *sql.DB) error {
 			112,
 			'2023-11-03',
 			7.6,
-			'https://image.tmdb.org/t/p/w500/q6y0Go1tsGEsmtFryDOJo3dEmqu.jpg',
+			'https://placehold.co/500x750/0f1f1a/86efac/png?text=Monsoon+Diaries',
 			TRUE,
 			NOW(),
 			NOW()
@@ -293,7 +293,7 @@ func ensureSchema(ctx context.Context, db *sql.DB) error {
 			121,
 			'2024-02-09',
 			8.1,
-			'https://image.tmdb.org/t/p/w500/arw2vcBveWOVZr6pxd9XTd1TdQa.jpg',
+			'https://placehold.co/500x750/1a0f14/fbcfe8/png?text=The+Last+Ticket',
 			TRUE,
 			NOW(),
 			NOW()
@@ -303,6 +303,23 @@ func ensureSchema(ctx context.Context, db *sql.DB) error {
 
 	if _, err := db.ExecContext(ctx, seedMoviesQuery); err != nil {
 		return err
+	}
+
+	patchPosters := []struct {
+		id  string
+		url string
+	}{
+		{"mov_001", "https://placehold.co/500x750/0c1222/7dd3fc/png?text=Starlight+Horizon"},
+		{"mov_002", "https://placehold.co/500x750/0f1f1a/86efac/png?text=Monsoon+Diaries"},
+		{"mov_003", "https://placehold.co/500x750/1a0f14/fbcfe8/png?text=The+Last+Ticket"},
+	}
+	for _, p := range patchPosters {
+		if _, err := db.ExecContext(ctx,
+			`UPDATE movies SET poster_url = $2, updated_at = NOW() WHERE id = $1`,
+			p.id, p.url,
+		); err != nil {
+			return err
+		}
 	}
 
 	seedTheatersQuery := `

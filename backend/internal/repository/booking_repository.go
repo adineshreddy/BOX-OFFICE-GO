@@ -20,6 +20,7 @@ var (
 	ErrBookingNotOwned         = errors.New("booking does not belong to the requesting user")
 	ErrDuplicatePayment        = errors.New("duplicate payment for this idempotency key")
 	ErrPaymentNotFound         = errors.New("payment transaction not found")
+	ErrShowtimeStarted         = errors.New("showtime has already started")
 )
 
 type BookingRepository interface {

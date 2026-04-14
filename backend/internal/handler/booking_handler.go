@@ -101,6 +101,9 @@ func handleBookingError(w http.ResponseWriter, err error) {
 	case errors.Is(err, repository.ErrShowtimeNotFound):
 		response.Error(w, http.StatusNotFound, "showtime not found", nil)
 		return
+	case errors.Is(err, repository.ErrShowtimeStarted):
+		response.Error(w, http.StatusBadRequest, "this showtime has already started", nil)
+		return
 	case errors.Is(err, repository.ErrHoldNotFound):
 		response.Error(w, http.StatusNotFound, "booking hold not found", nil)
 		return
