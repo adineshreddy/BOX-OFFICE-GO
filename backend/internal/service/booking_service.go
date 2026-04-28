@@ -73,6 +73,21 @@ func (s *BookingService) CheckoutBookingHold(ctx context.Context, input domain.C
 		return domain.BookingCheckoutResult{}, fmt.Errorf("paymentMethod is required")
 	}
 
+	cardNumber := strings.TrimSpace(input.CardNumber)
+	if cardNumber == "" {
+		return domain.BookingCheckoutResult{}, fmt.Errorf("cardNumber is required")
+	}
+
+	cardExpiry := strings.TrimSpace(input.CardExpiry)
+	if cardExpiry == "" {
+		return domain.BookingCheckoutResult{}, fmt.Errorf("cardExpiry is required")
+	}
+
+	cardCVV := strings.TrimSpace(input.CardCVV)
+	if cardCVV == "" {
+		return domain.BookingCheckoutResult{}, fmt.Errorf("cardCvv is required")
+	}
+
 	idempotencyKey := strings.TrimSpace(input.IdempotencyKey)
 	if idempotencyKey == "" {
 		return domain.BookingCheckoutResult{}, fmt.Errorf("idempotencyKey is required")
@@ -140,6 +155,9 @@ func (s *BookingService) CheckoutBookingHold(ctx context.Context, input domain.C
 	chargeResp, chargeErr := s.paymentGateway.Charge(ctx, payment.ChargeRequest{
 		Amount:        hold.TotalAmount,
 		PaymentMethod: paymentMethod,
+		CardNumber:    cardNumber,
+		CardExpiry:    cardExpiry,
+		CardCVV:       cardCVV,
 		HoldID:        holdID,
 		UserID:        userID,
 	})

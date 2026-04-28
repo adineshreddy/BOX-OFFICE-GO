@@ -186,7 +186,7 @@ func TestBookingServiceCheckoutBookingHold_Validation(t *testing.T) {
 
 	// missing holdId
 	_, err := svc.CheckoutBookingHold(context.Background(), domain.ConfirmBookingInput{
-		UserID: "usr_1", PaymentMethod: "card", IdempotencyKey: "key_1",
+		UserID: "usr_1", PaymentMethod: "card", CardNumber: "4111111111111111", CardExpiry: "12/29", CardCVV: "123", IdempotencyKey: "key_1",
 	})
 	if err == nil || !strings.Contains(err.Error(), "holdId is required") {
 		t.Fatalf("expected holdId validation error, got %v", err)
@@ -194,7 +194,7 @@ func TestBookingServiceCheckoutBookingHold_Validation(t *testing.T) {
 
 	// missing userId
 	_, err = svc.CheckoutBookingHold(context.Background(), domain.ConfirmBookingInput{
-		HoldID: "hold_1", PaymentMethod: "card", IdempotencyKey: "key_1",
+		HoldID: "hold_1", PaymentMethod: "card", CardNumber: "4111111111111111", CardExpiry: "12/29", CardCVV: "123", IdempotencyKey: "key_1",
 	})
 	if err == nil || !strings.Contains(err.Error(), "userId is required") {
 		t.Fatalf("expected userId validation error, got %v", err)
@@ -202,15 +202,39 @@ func TestBookingServiceCheckoutBookingHold_Validation(t *testing.T) {
 
 	// missing paymentMethod
 	_, err = svc.CheckoutBookingHold(context.Background(), domain.ConfirmBookingInput{
-		HoldID: "hold_1", UserID: "usr_1", IdempotencyKey: "key_1",
+		HoldID: "hold_1", UserID: "usr_1", CardNumber: "4111111111111111", CardExpiry: "12/29", CardCVV: "123", IdempotencyKey: "key_1",
 	})
 	if err == nil || !strings.Contains(err.Error(), "paymentMethod is required") {
 		t.Fatalf("expected paymentMethod validation error, got %v", err)
 	}
 
+	// missing cardNumber
+	_, err = svc.CheckoutBookingHold(context.Background(), domain.ConfirmBookingInput{
+		HoldID: "hold_1", UserID: "usr_1", PaymentMethod: "card", CardExpiry: "12/29", CardCVV: "123", IdempotencyKey: "key_1",
+	})
+	if err == nil || !strings.Contains(err.Error(), "cardNumber is required") {
+		t.Fatalf("expected cardNumber validation error, got %v", err)
+	}
+
+	// missing cardExpiry
+	_, err = svc.CheckoutBookingHold(context.Background(), domain.ConfirmBookingInput{
+		HoldID: "hold_1", UserID: "usr_1", PaymentMethod: "card", CardNumber: "4111111111111111", CardCVV: "123", IdempotencyKey: "key_1",
+	})
+	if err == nil || !strings.Contains(err.Error(), "cardExpiry is required") {
+		t.Fatalf("expected cardExpiry validation error, got %v", err)
+	}
+
+	// missing cardCvv
+	_, err = svc.CheckoutBookingHold(context.Background(), domain.ConfirmBookingInput{
+		HoldID: "hold_1", UserID: "usr_1", PaymentMethod: "card", CardNumber: "4111111111111111", CardExpiry: "12/29", IdempotencyKey: "key_1",
+	})
+	if err == nil || !strings.Contains(err.Error(), "cardCvv is required") {
+		t.Fatalf("expected cardCvv validation error, got %v", err)
+	}
+
 	// missing idempotencyKey
 	_, err = svc.CheckoutBookingHold(context.Background(), domain.ConfirmBookingInput{
-		HoldID: "hold_1", UserID: "usr_1", PaymentMethod: "card",
+		HoldID: "hold_1", UserID: "usr_1", PaymentMethod: "card", CardNumber: "4111111111111111", CardExpiry: "12/29", CardCVV: "123",
 	})
 	if err == nil || !strings.Contains(err.Error(), "idempotencyKey is required") {
 		t.Fatalf("expected idempotencyKey validation error, got %v", err)
@@ -229,7 +253,7 @@ func TestBookingServiceCheckoutBookingHold_Success(t *testing.T) {
 	svc := newTestService(repo)
 
 	result, err := svc.CheckoutBookingHold(context.Background(), domain.ConfirmBookingInput{
-		HoldID: "hold_1", UserID: "usr_1", PaymentMethod: "card", IdempotencyKey: "key_1",
+		HoldID: "hold_1", UserID: "usr_1", PaymentMethod: "card", CardNumber: "4111111111111111", CardExpiry: "12/29", CardCVV: "123", IdempotencyKey: "key_1",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error %v", err)
@@ -415,7 +439,7 @@ func TestCheckout_PaymentSuccess_ConfirmsBooking(t *testing.T) {
 	svc := newTestService(repo) // default gateway returns SUCCESS
 
 	result, err := svc.CheckoutBookingHold(context.Background(), domain.ConfirmBookingInput{
-		HoldID: "hold_1", UserID: "usr_1", PaymentMethod: "card", IdempotencyKey: "key_success",
+		HoldID: "hold_1", UserID: "usr_1", PaymentMethod: "card", CardNumber: "4111111111111111", CardExpiry: "12/29", CardCVV: "123", IdempotencyKey: "key_success",
 	})
 	if err != nil {
 		t.Fatalf("expected success, got %v", err)
@@ -453,7 +477,7 @@ func TestCheckout_PaymentDeclined_LeavesHoldRetryable(t *testing.T) {
 	svc := newTestServiceWithGateway(repo, gw)
 
 	_, err := svc.CheckoutBookingHold(context.Background(), domain.ConfirmBookingInput{
-		HoldID: "hold_1", UserID: "usr_1", PaymentMethod: "card_decline", IdempotencyKey: "key_decline",
+		HoldID: "hold_1", UserID: "usr_1", PaymentMethod: "card_decline", CardNumber: "4000000000000002", CardExpiry: "12/29", CardCVV: "123", IdempotencyKey: "key_decline",
 	})
 	if !errors.Is(err, payment.ErrPaymentDeclined) {
 		t.Fatalf("expected ErrPaymentDeclined, got %v", err)
@@ -479,7 +503,7 @@ func TestCheckout_GatewayTimeout_LeavesHoldRetryable(t *testing.T) {
 	svc := newTestServiceWithGateway(repo, gw)
 
 	_, err := svc.CheckoutBookingHold(context.Background(), domain.ConfirmBookingInput{
-		HoldID: "hold_1", UserID: "usr_1", PaymentMethod: "card_timeout", IdempotencyKey: "key_timeout",
+		HoldID: "hold_1", UserID: "usr_1", PaymentMethod: "card_timeout", CardNumber: "4111111111111111", CardExpiry: "12/29", CardCVV: "123", IdempotencyKey: "key_timeout",
 	})
 	if !errors.Is(err, payment.ErrGatewayTimeout) {
 		t.Fatalf("expected ErrGatewayTimeout, got %v", err)
@@ -506,7 +530,7 @@ func TestCheckout_Idempotency_ReturnsPreviousSuccess(t *testing.T) {
 	svc := newTestService(repo)
 
 	result, err := svc.CheckoutBookingHold(context.Background(), domain.ConfirmBookingInput{
-		HoldID: "hold_1", UserID: "usr_1", PaymentMethod: "card", IdempotencyKey: "key_dup",
+		HoldID: "hold_1", UserID: "usr_1", PaymentMethod: "card", CardNumber: "4111111111111111", CardExpiry: "12/29", CardCVV: "123", IdempotencyKey: "key_dup",
 	})
 	if err != nil {
 		t.Fatalf("expected success for idempotent replay, got %v", err)
@@ -534,7 +558,7 @@ func TestCheckout_HoldExpired_ReturnsError(t *testing.T) {
 	svc := newTestService(repo)
 
 	_, err := svc.CheckoutBookingHold(context.Background(), domain.ConfirmBookingInput{
-		HoldID: "hold_1", UserID: "usr_1", PaymentMethod: "card", IdempotencyKey: "key_exp",
+		HoldID: "hold_1", UserID: "usr_1", PaymentMethod: "card", CardNumber: "4111111111111111", CardExpiry: "12/29", CardCVV: "123", IdempotencyKey: "key_exp",
 	})
 	if !errors.Is(err, repository.ErrHoldExpired) {
 		t.Fatalf("expected ErrHoldExpired, got %v", err)
@@ -556,7 +580,7 @@ func TestCheckout_HoldAlreadyConfirmed_ReturnsFinalized(t *testing.T) {
 	svc := newTestService(repo)
 
 	_, err := svc.CheckoutBookingHold(context.Background(), domain.ConfirmBookingInput{
-		HoldID: "hold_1", UserID: "usr_1", PaymentMethod: "card", IdempotencyKey: "key_fin",
+		HoldID: "hold_1", UserID: "usr_1", PaymentMethod: "card", CardNumber: "4111111111111111", CardExpiry: "12/29", CardCVV: "123", IdempotencyKey: "key_fin",
 	})
 	if !errors.Is(err, repository.ErrHoldFinalized) {
 		t.Fatalf("expected ErrHoldFinalized, got %v", err)
