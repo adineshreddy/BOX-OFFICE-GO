@@ -16,6 +16,9 @@ var (
 type ChargeRequest struct {
 	Amount        float64
 	PaymentMethod string
+	CardNumber    string
+	CardExpiry    string
+	CardCVV       string
 	HoldID        string
 	UserID        string
 }
@@ -33,11 +36,7 @@ type Gateway interface {
 }
 
 // MockGateway simulates payment processing for development/testing.
-// It uses deterministic rules based on PaymentMethod to trigger different outcomes:
-//
-//	"card_decline" → returns ErrPaymentDeclined
-//	"card_timeout" → returns ErrGatewayTimeout
-//	any other value → succeeds
+// It always returns success for submitted checkout data.
 type MockGateway struct{}
 
 func NewMockGateway() *MockGateway {
@@ -45,20 +44,9 @@ func NewMockGateway() *MockGateway {
 }
 
 func (g *MockGateway) Charge(_ context.Context, req ChargeRequest) (ChargeResponse, error) {
-	switch req.PaymentMethod {
-	case "card_decline":
-		return ChargeResponse{
-			Status: "FAILED",
-			Reason: "card declined by issuing bank",
-		}, ErrPaymentDeclined
-
-	case "card_timeout":
-		return ChargeResponse{}, ErrGatewayTimeout
-
-	default:
-		return ChargeResponse{
-			GatewayTxnID: fmt.Sprintf("gw_txn_%d", time.Now().UnixNano()),
-			Status:       "SUCCESS",
-		}, nil
-	}
+	_ = req
+	return ChargeResponse{
+		GatewayTxnID: fmt.Sprintf("gw_txn_%d", time.Now().UnixNano()),
+		Status:       "SUCCESS",
+	}, nil
 }

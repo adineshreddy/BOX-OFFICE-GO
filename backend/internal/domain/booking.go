@@ -36,6 +36,9 @@ type ConfirmBookingInput struct {
 	HoldID         string `json:"holdId"`
 	UserID         string `json:"userId"`
 	PaymentMethod  string `json:"paymentMethod"`
+	CardNumber     string `json:"cardNumber"`
+	CardExpiry     string `json:"cardExpiry"`
+	CardCVV        string `json:"cardCvv"`
 	IdempotencyKey string `json:"idempotencyKey"`
 }
 

@@ -180,7 +180,7 @@ func TestBookingHandlerCheckoutBookingHold_Success(t *testing.T) {
 		},
 	})
 
-	payload := []byte(`{"holdId":"hold_1","paymentMethod":"card","idempotencyKey":"key_1"}`)
+	payload := []byte(`{"holdId":"hold_1","paymentMethod":"card","cardNumber":"4111111111111111","cardExpiry":"12/29","cardCvv":"123","idempotencyKey":"key_1"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/bookings/checkout", bytes.NewReader(payload))
 	req = withAuth(req, "usr_1")
 	rec := httptest.NewRecorder()
@@ -384,7 +384,7 @@ func TestCheckoutHandler_PaymentDeclined_Returns402(t *testing.T) {
 	}
 	h := newBookingHandlerWithGateway(&bookingRepoHandlerStub{}, gw)
 
-	payload := []byte(`{"holdId":"hold_1","paymentMethod":"card_decline","idempotencyKey":"key_dec"}`)
+	payload := []byte(`{"holdId":"hold_1","paymentMethod":"card_decline","cardNumber":"4000000000000002","cardExpiry":"12/29","cardCvv":"123","idempotencyKey":"key_dec"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/bookings/checkout", bytes.NewReader(payload))
 	req = withAuth(req, "usr_1")
 	rec := httptest.NewRecorder()
@@ -403,7 +403,7 @@ func TestCheckoutHandler_GatewayTimeout_Returns502(t *testing.T) {
 	}
 	h := newBookingHandlerWithGateway(&bookingRepoHandlerStub{}, gw)
 
-	payload := []byte(`{"holdId":"hold_1","paymentMethod":"card_timeout","idempotencyKey":"key_to"}`)
+	payload := []byte(`{"holdId":"hold_1","paymentMethod":"card_timeout","cardNumber":"4111111111111111","cardExpiry":"12/29","cardCvv":"123","idempotencyKey":"key_to"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/bookings/checkout", bytes.NewReader(payload))
 	req = withAuth(req, "usr_1")
 	rec := httptest.NewRecorder()
@@ -431,7 +431,7 @@ func TestCheckoutHandler_MissingPaymentMethod_Returns400(t *testing.T) {
 func TestCheckoutHandler_MissingIdempotencyKey_Returns400(t *testing.T) {
 	h := newBookingHandlerForTest(&bookingRepoHandlerStub{})
 
-	payload := []byte(`{"holdId":"hold_1","paymentMethod":"card"}`)
+	payload := []byte(`{"holdId":"hold_1","paymentMethod":"card","cardNumber":"4111111111111111","cardExpiry":"12/29","cardCvv":"123"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/bookings/checkout", bytes.NewReader(payload))
 	req = withAuth(req, "usr_1")
 	rec := httptest.NewRecorder()
