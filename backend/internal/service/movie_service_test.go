@@ -11,16 +11,16 @@ import (
 )
 
 type movieRepoStub struct {
-	listActiveFn            func(ctx context.Context, titleQuery string, genreQuery string) ([]domain.Movie, error)
-	getByIDFn               func(ctx context.Context, movieID string) (domain.Movie, error)
-	listShowtimeRecordsFn   func(ctx context.Context, movieID string, showDate *time.Time) ([]domain.MovieShowtimeRecord, error)
-	getShowDetailsFn        func(ctx context.Context, movieID string, theaterID string, showTime time.Time) (domain.ShowDetails, error)
-	getSeatMapFn            func(ctx context.Context, movieID string, theaterID string, showTime time.Time) (domain.SeatMapResponse, error)
-	getSeatAvailabilityFn   func(ctx context.Context, movieID string, theaterID string, showTime time.Time) (domain.SeatAvailabilityResponse, error)
+	listActiveFn          func(ctx context.Context, q domain.MovieListQuery) (domain.MovieListResponse, error)
+	getByIDFn             func(ctx context.Context, movieID string) (domain.Movie, error)
+	listShowtimeRecordsFn func(ctx context.Context, movieID string, showDate *time.Time) ([]domain.MovieShowtimeRecord, error)
+	getShowDetailsFn      func(ctx context.Context, movieID string, theaterID string, showTime time.Time) (domain.ShowDetails, error)
+	getSeatMapFn          func(ctx context.Context, movieID string, theaterID string, showTime time.Time) (domain.SeatMapResponse, error)
+	getSeatAvailabilityFn func(ctx context.Context, movieID string, theaterID string, showTime time.Time) (domain.SeatAvailabilityResponse, error)
 }
 
-func (s *movieRepoStub) ListActive(ctx context.Context, titleQuery string, genreQuery string) ([]domain.Movie, error) {
-	return s.listActiveFn(ctx, titleQuery, genreQuery)
+func (s *movieRepoStub) ListActive(ctx context.Context, q domain.MovieListQuery) (domain.MovieListResponse, error) {
+	return s.listActiveFn(ctx, q)
 }
 func (s *movieRepoStub) GetByID(ctx context.Context, movieID string) (domain.Movie, error) {
 	return s.getByIDFn(ctx, movieID)
@@ -38,6 +38,16 @@ func (s *movieRepoStub) GetSeatAvailabilityBySelection(ctx context.Context, movi
 	return s.getSeatAvailabilityFn(ctx, movieID, theaterID, showTime)
 }
 
+// helper: stub that captures the MovieListQuery passed down to the repo.
+func listActiveCapture(captured *domain.MovieListQuery, movies []domain.Movie, total int) func(context.Context, domain.MovieListQuery) (domain.MovieListResponse, error) {
+	return func(_ context.Context, q domain.MovieListQuery) (domain.MovieListResponse, error) {
+		*captured = q
+		return domain.MovieListResponse{Movies: movies, Page: q.Page, Limit: q.Limit, Total: total, HasNext: q.Page*q.Limit < total}, nil
+	}
+}
+
+// ── existing tests ────────────────────────────────────────────────────
+
 func TestNewMovieService(t *testing.T) {
 	svc := NewMovieService(&movieRepoStub{})
 	if svc == nil {
@@ -47,14 +57,14 @@ func TestNewMovieService(t *testing.T) {
 
 func TestMovieServiceListMovies(t *testing.T) {
 	svc := NewMovieService(&movieRepoStub{
-		listActiveFn: func(_ context.Context, _, _ string) ([]domain.Movie, error) {
-			return []domain.Movie{{ID: "mov_1", Title: "X"}}, nil
+		listActiveFn: func(_ context.Context, _ domain.MovieListQuery) (domain.MovieListResponse, error) {
+			return domain.MovieListResponse{Movies: []domain.Movie{{ID: "mov_1", Title: "X"}}, Total: 1}, nil
 		},
 	})
 
-	movies, err := svc.ListMovies(context.Background(), "", "")
-	if err != nil || len(movies) != 1 {
-		t.Fatalf("unexpected result movies=%v err=%v", movies, err)
+	result, err := svc.ListMovies(context.Background(), domain.MovieListQuery{})
+	if err != nil || len(result.Movies) != 1 {
+		t.Fatalf("unexpected result=%v err=%v", result, err)
 	}
 }
 
@@ -174,5 +184,133 @@ func TestMovieServiceListTheatersByMovie_RepoError(t *testing.T) {
 	_, err := svc.ListTheatersByMovie(context.Background(), "mov_404", "")
 	if !errors.Is(err, repository.ErrMovieNotFound) {
 		t.Fatalf("expected ErrMovieNotFound, got %v", err)
+	}
+}
+
+// ── Pagination + sort tests ───────────────────────────────────────────
+
+func TestListMovies_DefaultsApplied(t *testing.T) {
+	var captured domain.MovieListQuery
+	svc := NewMovieService(&movieRepoStub{
+		listActiveFn: listActiveCapture(&captured, []domain.Movie{{ID: "m1"}}, 1),
+	})
+
+	_, err := svc.ListMovies(context.Background(), domain.MovieListQuery{})
+	if err != nil {
+		t.Fatalf("unexpected error %v", err)
+	}
+	if captured.Page != 1 {
+		t.Fatalf("expected default page=1, got %d", captured.Page)
+	}
+	if captured.Limit != 20 {
+		t.Fatalf("expected default limit=20, got %d", captured.Limit)
+	}
+	if captured.SortBy != domain.MovieSortByReleaseDate {
+		t.Fatalf("expected default sort=%s, got %s", domain.MovieSortByReleaseDate, captured.SortBy)
+	}
+}
+
+func TestListMovies_ExplicitPageAndLimit(t *testing.T) {
+	var captured domain.MovieListQuery
+	svc := NewMovieService(&movieRepoStub{
+		listActiveFn: listActiveCapture(&captured, []domain.Movie{{ID: "m1"}}, 50),
+	})
+
+	_, err := svc.ListMovies(context.Background(), domain.MovieListQuery{Page: 3, Limit: 10, SortBy: domain.MovieSortByTitle})
+	if err != nil {
+		t.Fatalf("unexpected error %v", err)
+	}
+	if captured.Page != 3 || captured.Limit != 10 {
+		t.Fatalf("expected page=3 limit=10, got page=%d limit=%d", captured.Page, captured.Limit)
+	}
+	if captured.SortBy != domain.MovieSortByTitle {
+		t.Fatalf("expected sort=title, got %s", captured.SortBy)
+	}
+}
+
+func TestListMovies_LimitCappedAt100(t *testing.T) {
+	var captured domain.MovieListQuery
+	svc := NewMovieService(&movieRepoStub{
+		listActiveFn: listActiveCapture(&captured, nil, 0),
+	})
+
+	_, _ = svc.ListMovies(context.Background(), domain.MovieListQuery{Limit: 999})
+	if captured.Limit != 100 {
+		t.Fatalf("expected limit capped at 100, got %d", captured.Limit)
+	}
+}
+
+func TestListMovies_InvalidSortFallsBackToDefault(t *testing.T) {
+	var captured domain.MovieListQuery
+	svc := NewMovieService(&movieRepoStub{
+		listActiveFn: listActiveCapture(&captured, nil, 0),
+	})
+
+	_, _ = svc.ListMovies(context.Background(), domain.MovieListQuery{SortBy: "not_a_field"})
+	if captured.SortBy != domain.MovieSortByReleaseDate {
+		t.Fatalf("expected fallback sort=%s, got %s", domain.MovieSortByReleaseDate, captured.SortBy)
+	}
+}
+
+func TestListMovies_HasNextTrueWhenMoreResults(t *testing.T) {
+	svc := NewMovieService(&movieRepoStub{
+		listActiveFn: func(_ context.Context, q domain.MovieListQuery) (domain.MovieListResponse, error) {
+			// page=1, limit=5, total=12 → hasNext should be true
+			movies := make([]domain.Movie, 5)
+			return domain.MovieListResponse{Movies: movies, Page: 1, Limit: 5, Total: 12, HasNext: true}, nil
+		},
+	})
+
+	result, err := svc.ListMovies(context.Background(), domain.MovieListQuery{Page: 1, Limit: 5})
+	if err != nil {
+		t.Fatalf("unexpected error %v", err)
+	}
+	if !result.HasNext {
+		t.Fatal("expected hasNext=true when more pages exist")
+	}
+	if result.Total != 12 {
+		t.Fatalf("expected total=12, got %d", result.Total)
+	}
+}
+
+func TestListMovies_HasNextFalseOnLastPage(t *testing.T) {
+	svc := NewMovieService(&movieRepoStub{
+		listActiveFn: func(_ context.Context, q domain.MovieListQuery) (domain.MovieListResponse, error) {
+			// page=2, limit=5, total=8 → 5+3=8, no next page
+			movies := make([]domain.Movie, 3)
+			return domain.MovieListResponse{Movies: movies, Page: 2, Limit: 5, Total: 8, HasNext: false}, nil
+		},
+	})
+
+	result, err := svc.ListMovies(context.Background(), domain.MovieListQuery{Page: 2, Limit: 5})
+	if err != nil {
+		t.Fatalf("unexpected error %v", err)
+	}
+	if result.HasNext {
+		t.Fatal("expected hasNext=false on last page")
+	}
+}
+
+func TestListMovies_FilterPassedThrough(t *testing.T) {
+	var captured domain.MovieListQuery
+	svc := NewMovieService(&movieRepoStub{
+		listActiveFn: listActiveCapture(&captured, nil, 0),
+	})
+
+	_, _ = svc.ListMovies(context.Background(), domain.MovieListQuery{Title: "avatar", Genre: "action"})
+	if captured.Title != "avatar" || captured.Genre != "action" {
+		t.Fatalf("expected filters passed through, got title=%q genre=%q", captured.Title, captured.Genre)
+	}
+}
+
+func TestListMovies_SortByRating(t *testing.T) {
+	var captured domain.MovieListQuery
+	svc := NewMovieService(&movieRepoStub{
+		listActiveFn: listActiveCapture(&captured, nil, 0),
+	})
+
+	_, _ = svc.ListMovies(context.Background(), domain.MovieListQuery{SortBy: domain.MovieSortByRating})
+	if captured.SortBy != domain.MovieSortByRating {
+		t.Fatalf("expected sort=rating, got %s", captured.SortBy)
 	}
 }

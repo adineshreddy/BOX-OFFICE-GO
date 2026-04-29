@@ -21,9 +21,45 @@ func NewMovieRepository(db *sql.DB) *MovieRepository {
 	return &MovieRepository{db: db}
 }
 
-func (r *MovieRepository) ListActive(ctx context.Context, titleQuery string, genreQuery string) ([]domain.Movie, error) {
-	baseQuery := `
+func (r *MovieRepository) ListActive(ctx context.Context, q domain.MovieListQuery) (domain.MovieListResponse, error) {
+	// Map the sort field to a SQL column + direction.
+	sortMap := map[string]string{
+		domain.MovieSortByReleaseDate: "release_date DESC, title ASC",
+		domain.MovieSortByTitle:       "title ASC, release_date DESC",
+		domain.MovieSortByRating:      "rating DESC, title ASC",
+	}
+	orderClause, ok := sortMap[q.SortBy]
+	if !ok {
+		orderClause = sortMap[domain.MovieSortByReleaseDate]
+	}
+
+	clauses := make([]string, 0)
+	args := make([]any, 0)
+	argIndex := 1
+
+	if trimmed := strings.TrimSpace(q.Title); trimmed != "" {
+		clauses = append(clauses, fmt.Sprintf("title ILIKE $%d", argIndex))
+		args = append(args, "%"+trimmed+"%")
+		argIndex++
+	}
+
+	if trimmed := strings.TrimSpace(q.Genre); trimmed != "" {
+		clauses = append(clauses, fmt.Sprintf("genre ILIKE $%d", argIndex))
+		args = append(args, "%"+trimmed+"%")
+		argIndex++
+	}
+
+	where := "WHERE is_active = TRUE"
+	if len(clauses) > 0 {
+		where += " AND " + strings.Join(clauses, " AND ")
+	}
+
+	offset := (q.Page - 1) * q.Limit
+
+	// COUNT(*) OVER() gives the total filtered row count in a single pass.
+	fullQuery := fmt.Sprintf(`
 	SELECT
+		COUNT(*) OVER() AS total_count,
 		id,
 		title,
 		description,
@@ -37,47 +73,27 @@ func (r *MovieRepository) ListActive(ctx context.Context, titleQuery string, gen
 		created_at,
 		updated_at
 	FROM movies
-	WHERE is_active = TRUE
-	`
+	%s
+	ORDER BY %s
+	LIMIT $%d OFFSET $%d
+	`, where, orderClause, argIndex, argIndex+1)
 
-	clauses := make([]string, 0)
-	args := make([]any, 0)
-	argIndex := 1
+	args = append(args, q.Limit, offset)
 
-	if trimmed := strings.TrimSpace(titleQuery); trimmed != "" {
-		clauses = append(clauses, fmt.Sprintf("title ILIKE $%d", argIndex))
-		args = append(args, "%"+trimmed+"%")
-		argIndex++
-	}
-
-	if trimmed := strings.TrimSpace(genreQuery); trimmed != "" {
-		clauses = append(clauses, fmt.Sprintf("genre ILIKE $%d", argIndex))
-		args = append(args, "%"+trimmed+"%")
-		argIndex++
-	}
-
-	queryBuilder := strings.Builder{}
-	queryBuilder.WriteString(baseQuery)
-
-	if len(clauses) > 0 {
-		queryBuilder.WriteString(" AND ")
-		queryBuilder.WriteString(strings.Join(clauses, " AND "))
-	}
-
-	queryBuilder.WriteString(" ORDER BY release_date DESC, title ASC")
-
-	rows, err := r.db.QueryContext(ctx, queryBuilder.String(), args...)
+	rows, err := r.db.QueryContext(ctx, fullQuery, args...)
 	if err != nil {
-		return nil, err
+		return domain.MovieListResponse{}, err
 	}
 	defer rows.Close()
 
+	var total int
 	movies := make([]domain.Movie, 0)
 	for rows.Next() {
 		var movie domain.Movie
 		var posterURL sql.NullString
 
 		if scanErr := rows.Scan(
+			&total,
 			&movie.ID,
 			&movie.Title,
 			&movie.Description,
@@ -91,7 +107,7 @@ func (r *MovieRepository) ListActive(ctx context.Context, titleQuery string, gen
 			&movie.CreatedAt,
 			&movie.UpdatedAt,
 		); scanErr != nil {
-			return nil, scanErr
+			return domain.MovieListResponse{}, scanErr
 		}
 
 		if posterURL.Valid {
@@ -102,10 +118,16 @@ func (r *MovieRepository) ListActive(ctx context.Context, titleQuery string, gen
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, err
+		return domain.MovieListResponse{}, err
 	}
 
-	return movies, nil
+	return domain.MovieListResponse{
+		Movies:  movies,
+		Page:    q.Page,
+		Limit:   q.Limit,
+		Total:   total,
+		HasNext: offset+len(movies) < total,
+	}, nil
 }
 
 func (r *MovieRepository) GetByID(ctx context.Context, movieID string) (domain.Movie, error) {
