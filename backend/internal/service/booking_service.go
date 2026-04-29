@@ -3,6 +3,7 @@ package service
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -99,17 +100,7 @@ func (s *BookingService) CheckoutBookingHold(ctx context.Context, input domain.C
 		return domain.BookingCheckoutResult{}, fmt.Errorf("idempotency lookup: %w", err)
 	}
 	if existing != nil {
-		if existing.Status == domain.PaymentStatusSuccess {
-			// Payment already succeeded — return the confirmed booking.
-			return domain.BookingCheckoutResult{
-				HoldID:        existing.HoldID,
-				UserID:        existing.UserID,
-				TotalAmount:   existing.Amount,
-				Status:        domain.BookingHoldStatusConfirmed,
-				TransactionID: existing.ID,
-			}, nil
-		}
-		// Previous attempt failed — allow retry with a fresh transaction below.
+		return s.resolveExistingIdempotentCheckout(ctx, holdID, userID, idempotencyKey, existing)
 	}
 
 	// ── 2. Cleanup expired holds ─────────────────────────────────────
@@ -148,6 +139,17 @@ func (s *BookingService) CheckoutBookingHold(ctx context.Context, input domain.C
 		UpdatedAt:      now,
 	}
 	if err := s.bookingRepository.CreatePaymentTransaction(ctx, pendingTxn); err != nil {
+		if errors.Is(err, repository.ErrDuplicatePayment) {
+			// Concurrent request with the same idempotency key inserted first.
+			existingTxn, lookupErr := s.bookingRepository.GetPaymentByIdempotencyKey(ctx, idempotencyKey)
+			if lookupErr != nil {
+				return domain.BookingCheckoutResult{}, fmt.Errorf("idempotency lookup after duplicate: %w", lookupErr)
+			}
+			if existingTxn == nil {
+				return domain.BookingCheckoutResult{}, fmt.Errorf("idempotency conflict: existing transaction not found")
+			}
+			return s.resolveExistingIdempotentCheckout(ctx, holdID, userID, idempotencyKey, existingTxn)
+		}
 		return domain.BookingCheckoutResult{}, fmt.Errorf("create payment transaction: %w", err)
 	}
 
@@ -188,6 +190,64 @@ func (s *BookingService) CheckoutBookingHold(ctx context.Context, input domain.C
 
 	result.TransactionID = txnID
 	return result, nil
+}
+
+func (s *BookingService) resolveExistingIdempotentCheckout(
+	ctx context.Context,
+	holdID string,
+	userID string,
+	idempotencyKey string,
+	existing *domain.PaymentTransaction,
+) (domain.BookingCheckoutResult, error) {
+	if existing.UserID != userID || existing.HoldID != holdID {
+		return domain.BookingCheckoutResult{}, fmt.Errorf("idempotencyKey is already used for a different checkout request")
+	}
+
+	switch existing.Status {
+	case domain.PaymentStatusSuccess:
+		return s.buildCheckoutResultFromBooking(ctx, userID, holdID, existing.ID, existing.Amount)
+	case domain.PaymentStatusPending:
+		return domain.BookingCheckoutResult{}, fmt.Errorf("idempotencyKey is already in progress")
+	case domain.PaymentStatusFailed:
+		return domain.BookingCheckoutResult{}, fmt.Errorf("idempotencyKey was already used for a failed payment attempt; use a new idempotencyKey to retry")
+	default:
+		return domain.BookingCheckoutResult{}, fmt.Errorf("idempotencyKey %s is in an unknown state", idempotencyKey)
+	}
+}
+
+func (s *BookingService) buildCheckoutResultFromBooking(
+	ctx context.Context,
+	userID string,
+	holdID string,
+	transactionID string,
+	totalAmount float64,
+) (domain.BookingCheckoutResult, error) {
+	bookings, err := s.bookingRepository.ListByUserID(ctx, userID)
+	if err != nil {
+		return domain.BookingCheckoutResult{}, fmt.Errorf("list bookings for idempotent replay: %w", err)
+	}
+
+	for _, booking := range bookings {
+		if booking.HoldID == holdID {
+			return domain.BookingCheckoutResult{
+				BookingID:     booking.BookingID,
+				HoldID:        booking.HoldID,
+				UserID:        booking.UserID,
+				ShowtimeID:    booking.ShowtimeID,
+				SeatNumbers:   booking.SeatNumbers,
+				Status:        booking.Status,
+				TotalAmount:   booking.TotalAmount,
+				ConfirmedAt:   booking.ConfirmedAt,
+				TransactionID: transactionID,
+			}, nil
+		}
+	}
+
+	return domain.BookingCheckoutResult{}, fmt.Errorf(
+		"successful payment found for hold %s but booking record is not available yet (amount=%.2f)",
+		holdID,
+		totalAmount,
+	)
 }
 
 func normalizeHoldInput(input domain.CreateBookingHoldInput) (domain.CreateBookingHoldInput, error) {
