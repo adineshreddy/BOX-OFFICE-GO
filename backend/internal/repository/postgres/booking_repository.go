@@ -426,6 +426,9 @@ func (r *BookingRepository) CancelBooking(ctx context.Context, bookingID string,
 	if !showStart.After(now) {
 		return repository.ErrShowtimeStarted
 	}
+	if showStart.Before(now.Add(1 * time.Hour)) {
+		return repository.ErrCancellationWindowClosed
+	}
 
 	// Cancel the booking
 	if _, err := tx.ExecContext(ctx,

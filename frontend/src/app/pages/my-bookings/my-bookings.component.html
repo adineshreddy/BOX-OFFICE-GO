@@ -26,57 +26,154 @@
       <p class="banner-error" role="alert">{{ cancelError() }}</p>
     }
 
-    <ul class="booking-list">
-      @for (b of bookings(); track b.bookingId) {
-        <li class="booking-card">
-          <div class="card-main">
-            <div class="title-row">
-              <h2>{{ b.movieTitle }}</h2>
-              <span class="status-pill" [class.status-pill--confirmed]="isConfirmed(b)" [class.status-pill--muted]="!isConfirmed(b)">
-                {{ b.status }}
-              </span>
-            </div>
-            <p class="theater-line">{{ b.theaterName }} · {{ b.city }}</p>
-            <p class="meta-line">
-              {{ formatWhen(b) }} · {{ b.screenName }} · {{ b.language }} · {{ b.format }}
-            </p>
-            <p class="meta-line">
-              <span class="label">Seats:</span> {{ b.seatNumbers.length ? b.seatNumbers.join(', ') : '—' }}
-            </p>
-            <p class="meta-line">
-              <span class="label">Total:</span> {{ b.totalAmount | currency: 'USD' }}
-            </p>
-            <p class="meta-line subtle">
-              <span class="label">Booked:</span> {{ formatConfirmed(b) }}
-            </p>
-            <p class="id-line">ID: {{ b.bookingId }}</p>
-          </div>
-          <div class="card-actions">
-            @if (isConfirmed(b)) {
-              <button
-                type="button"
-                class="btn-download"
-                [disabled]="downloadingId() === b.bookingId"
-                (click)="downloadTicket(b.bookingId)">
-                {{ downloadingId() === b.bookingId ? 'Downloading…' : 'Download PDF' }}
-              </button>
-              @if (canCancel(b)) {
-                <button
-                  type="button"
-                  class="btn-cancel"
-                  [disabled]="cancellingId() === b.bookingId"
-                  (click)="cancelBooking(b)">
-                  {{ cancellingId() === b.bookingId ? 'Cancelling…' : 'Cancel booking' }}
-                </button>
-              } @else {
-                <p class="no-actions">Cancellation closed — showtime has started.</p>
-              }
-            } @else {
-              <p class="no-actions">No actions for this booking.</p>
+    <section class="toolbar" aria-label="Booking filters">
+      <input
+        class="search-input"
+        type="text"
+        placeholder="Search by movie, theater, city, seat, or booking ID"
+        [ngModel]="searchQuery()"
+        (ngModelChange)="searchQuery.set($event)"
+      />
+      <select class="filter-input" [ngModel]="statusFilter()" (ngModelChange)="statusFilter.set($event)">
+        <option value="ALL">All statuses</option>
+        <option value="CONFIRMED">Confirmed</option>
+        <option value="CANCELLED">Cancelled</option>
+      </select>
+      <select class="filter-input" [ngModel]="sortBy()" (ngModelChange)="sortBy.set($event)">
+        <option value="showtime_desc">Showtime: latest first</option>
+        <option value="showtime_asc">Showtime: earliest first</option>
+        <option value="confirmed_desc">Recently booked</option>
+      </select>
+      <p class="result-label">{{ resultLabel() }}</p>
+    </section>
+
+    @if (filteredBookings().length === 0) {
+      <div class="empty-card">
+        <p>No bookings match your current filters.</p>
+        <button type="button" class="retry-btn" (click)="searchQuery.set(''); statusFilter.set('ALL'); sortBy.set('showtime_desc')">
+          Clear filters
+        </button>
+      </div>
+    } @else {
+      <section class="group">
+        <h2 class="group-title">Upcoming</h2>
+        @if (upcomingBookings().length === 0) {
+          <p class="group-empty">No upcoming bookings for this view.</p>
+        } @else {
+          <ul class="booking-list">
+            @for (b of upcomingBookings(); track b.bookingId) {
+              <li class="booking-card">
+                <div class="card-main">
+                  <div class="title-row">
+                    <h3>{{ b.movieTitle }}</h3>
+                    <span class="status-pill" [class.status-pill--confirmed]="isConfirmed(b)" [class.status-pill--muted]="!isConfirmed(b)">
+                      {{ b.status }}
+                    </span>
+                  </div>
+                  <p class="theater-line">{{ b.theaterName }} · {{ b.city }}</p>
+                  <p class="meta-line">
+                    {{ formatWhen(b) }} · {{ b.screenName }} · {{ b.language }} · {{ b.format }}
+                  </p>
+                  <p class="meta-line">
+                    <span class="label">Seats:</span> {{ b.seatNumbers.length ? b.seatNumbers.join(', ') : '—' }}
+                  </p>
+                  <p class="meta-line">
+                    <span class="label">Total:</span> {{ b.totalAmount | currency: 'USD' }}
+                  </p>
+                  <p class="meta-line subtle">
+                    <span class="label">Booked:</span> {{ formatConfirmed(b) }}
+                  </p>
+                  <p class="id-line">ID: {{ b.bookingId }}</p>
+                </div>
+                <div class="card-actions">
+                  @if (isConfirmed(b)) {
+                    <button
+                      type="button"
+                      class="btn-download"
+                      [disabled]="downloadingId() === b.bookingId"
+                      (click)="downloadTicket(b.bookingId)">
+                      {{ downloadingId() === b.bookingId ? 'Downloading…' : 'Download PDF' }}
+                    </button>
+                    @if (canCancel(b)) {
+                      <button
+                        type="button"
+                        class="btn-cancel"
+                        [disabled]="cancellingId() === b.bookingId"
+                        (click)="cancelBooking(b)">
+                        {{ cancellingId() === b.bookingId ? 'Cancelling…' : 'Cancel booking' }}
+                      </button>
+                    } @else {
+                      <p class="no-actions">Cancellation closed — allowed only up to 1 hour before showtime.</p>
+                    }
+                  } @else {
+                    <p class="no-actions">No actions for this booking.</p>
+                  }
+                </div>
+              </li>
             }
-          </div>
-        </li>
-      }
-    </ul>
+          </ul>
+        }
+      </section>
+
+      <section class="group">
+        <h2 class="group-title">Past</h2>
+        @if (pastBookings().length === 0) {
+          <p class="group-empty">No past bookings for this view.</p>
+        } @else {
+          <ul class="booking-list">
+            @for (b of pastBookings(); track b.bookingId) {
+              <li class="booking-card">
+                <div class="card-main">
+                  <div class="title-row">
+                    <h3>{{ b.movieTitle }}</h3>
+                    <span class="status-pill" [class.status-pill--confirmed]="isConfirmed(b)" [class.status-pill--muted]="!isConfirmed(b)">
+                      {{ b.status }}
+                    </span>
+                  </div>
+                  <p class="theater-line">{{ b.theaterName }} · {{ b.city }}</p>
+                  <p class="meta-line">
+                    {{ formatWhen(b) }} · {{ b.screenName }} · {{ b.language }} · {{ b.format }}
+                  </p>
+                  <p class="meta-line">
+                    <span class="label">Seats:</span> {{ b.seatNumbers.length ? b.seatNumbers.join(', ') : '—' }}
+                  </p>
+                  <p class="meta-line">
+                    <span class="label">Total:</span> {{ b.totalAmount | currency: 'USD' }}
+                  </p>
+                  <p class="meta-line subtle">
+                    <span class="label">Booked:</span> {{ formatConfirmed(b) }}
+                  </p>
+                  <p class="id-line">ID: {{ b.bookingId }}</p>
+                </div>
+                <div class="card-actions">
+                  @if (isConfirmed(b)) {
+                    <button
+                      type="button"
+                      class="btn-download"
+                      [disabled]="downloadingId() === b.bookingId"
+                      (click)="downloadTicket(b.bookingId)">
+                      {{ downloadingId() === b.bookingId ? 'Downloading…' : 'Download PDF' }}
+                    </button>
+                    @if (canCancel(b)) {
+                       <button
+                        type="button"
+                        class="btn-cancel"
+                        [disabled]="cancellingId() === b.bookingId"
+                        (click)="cancelBooking(b)">
+                        {{ cancellingId() === b.bookingId ? 'Cancelling…' : 'Cancel booking' }}
+                      </button>
+                    } @else {
+                      <p class="no-actions">Cancellation closed — allowed only up to 1 hour before showtime.</p>
+                    }
+                  } @else {
+                    <p class="no-actions">No actions for this booking.</p>
+                  }
+                </div>
+              </li>
+            }
+          </ul>
+        }
+      </section>
+    }
   }
 </div>

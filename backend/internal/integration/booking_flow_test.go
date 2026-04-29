@@ -18,6 +18,7 @@ import (
 
 	"box-office-go/backend/internal/domain"
 	httpRouter "box-office-go/backend/internal/http/router"
+	"box-office-go/backend/internal/payment"
 	"box-office-go/backend/internal/repository"
 	"box-office-go/backend/internal/repository/memory"
 	"box-office-go/backend/internal/service"
@@ -33,6 +34,7 @@ type integrationBookingRepo struct {
 	bookings  map[string]domain.BookingCheckoutResult
 	confirmed map[string]bool            // holdIDs already finalized
 	heldSeats map[string]map[string]bool // showtimeID → seat → held
+	payments  map[string]domain.PaymentTransaction
 }
 
 func newIntegrationBookingRepo() *integrationBookingRepo {
@@ -41,6 +43,7 @@ func newIntegrationBookingRepo() *integrationBookingRepo {
 		bookings:  make(map[string]domain.BookingCheckoutResult),
 		confirmed: make(map[string]bool),
 		heldSeats: make(map[string]map[string]bool),
+		payments:  make(map[string]domain.PaymentTransaction),
 	}
 }
 
@@ -136,6 +139,81 @@ func (r *integrationBookingRepo) CancelBooking(_ context.Context, bookingID stri
 	return nil
 }
 
+func (r *integrationBookingRepo) CreatePaymentTransaction(_ context.Context, txn domain.PaymentTransaction) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.payments[txn.IdempotencyKey] = txn
+	return nil
+}
+
+func (r *integrationBookingRepo) GetPaymentByIdempotencyKey(_ context.Context, key string) (*domain.PaymentTransaction, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	txn, ok := r.payments[key]
+	if !ok {
+		return nil, nil
+	}
+	copyTxn := txn
+	return &copyTxn, nil
+}
+
+func (r *integrationBookingRepo) UpdatePaymentStatus(_ context.Context, txnID string, status string, gatewayTxnID string, failureReason string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for key, txn := range r.payments {
+		if txn.ID == txnID {
+			txn.Status = status
+			txn.GatewayTxnID = gatewayTxnID
+			txn.FailureReason = failureReason
+			txn.UpdatedAt = time.Now().UTC()
+			r.payments[key] = txn
+			return nil
+		}
+	}
+	return repository.ErrPaymentNotFound
+}
+
+func (r *integrationBookingRepo) GetHoldDetails(_ context.Context, holdID string, userID string) (domain.BookingHold, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	hold, ok := r.holds[holdID]
+	if !ok || hold.UserID != userID {
+		return domain.BookingHold{}, repository.ErrHoldNotFound
+	}
+	return hold, nil
+}
+
+func (r *integrationBookingRepo) ReleaseHold(_ context.Context, holdID string, userID string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	hold, ok := r.holds[holdID]
+	if !ok || hold.UserID != userID {
+		return repository.ErrHoldNotFound
+	}
+	if hold.Status != domain.BookingHoldStatusHeld {
+		return repository.ErrHoldAlreadyReleased
+	}
+	hold.Status = domain.BookingHoldStatusExpired
+	r.holds[holdID] = hold
+	return nil
+}
+
+func (r *integrationBookingRepo) GetBookingForTicket(_ context.Context, bookingID string) (domain.TicketData, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	booking, ok := r.bookings[bookingID]
+	if !ok {
+		return domain.TicketData{}, repository.ErrBookingNotFound
+	}
+	return domain.TicketData{
+		BookingID:   booking.BookingID,
+		UserID:      booking.UserID,
+		SeatNumbers: booking.SeatNumbers,
+		Status:      booking.Status,
+		ConfirmedAt: time.Now().UTC(),
+	}, nil
+}
+
 // ---------------------------------------------------------------------------
 // Minimal no-op movie repository (booking tests don't hit movie endpoints)
 // ---------------------------------------------------------------------------
@@ -176,7 +254,7 @@ func newTestEnv(t *testing.T) *testEnv {
 	bookingRepo := newIntegrationBookingRepo()
 	authSvc := service.NewAuthService(userRepo)
 	movieSvc := service.NewMovieService(noopMovieRepo{})
-	bookingSvc := service.NewBookingService(bookingRepo)
+	bookingSvc := service.NewBookingService(bookingRepo, payment.NewMockGateway())
 
 	srv := httptest.NewServer(httpRouter.New(authSvc, movieSvc, bookingSvc))
 	t.Cleanup(srv.Close)
@@ -227,6 +305,17 @@ func mustStatus(t *testing.T, resp *http.Response, want int) {
 		body, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
 		t.Fatalf("expected HTTP %d, got %d — body: %s", want, resp.StatusCode, body)
+	}
+}
+
+func checkoutPayload(holdID string) map[string]string {
+	return map[string]string{
+		"holdId":         holdID,
+		"paymentMethod":  "card",
+		"cardNumber":     "4111111111111111",
+		"cardExpiry":     "12/30",
+		"cardCvv":        "123",
+		"idempotencyKey": fmt.Sprintf("idem_%d", time.Now().UnixNano()),
 	}
 }
 
@@ -292,7 +381,7 @@ func TestBookingFlow_HappyPath(t *testing.T) {
 	holdID := holdBody.Hold.HoldID
 
 	// Checkout the hold
-	checkoutPayload := map[string]string{"holdId": holdID}
+	checkoutPayload := checkoutPayload(holdID)
 	resp = doJSON(t, http.MethodPost, base+"/api/v1/bookings/checkout", checkoutPayload, token)
 	mustStatus(t, resp, http.StatusOK)
 
@@ -348,7 +437,7 @@ func TestBookingFlow_NoAuthToken(t *testing.T) {
 		body   any
 	}{
 		{http.MethodPost, "/api/v1/bookings/holds", map[string]any{"showtimeId": "st_1", "seatNumbers": []string{"A01"}}},
-		{http.MethodPost, "/api/v1/bookings/checkout", map[string]string{"holdId": "hold_1"}},
+		{http.MethodPost, "/api/v1/bookings/checkout", checkoutPayload("hold_1")},
 		{http.MethodGet, "/api/v1/bookings", nil},
 	}
 
@@ -442,18 +531,19 @@ func TestBookingFlow_ReplayCheckout(t *testing.T) {
 	holdID := holdBody.Hold.HoldID
 
 	// First checkout — must succeed
+	payload := checkoutPayload(holdID)
 	resp = doJSON(t, http.MethodPost, base+"/api/v1/bookings/checkout",
-		map[string]string{"holdId": holdID}, token)
+		payload, token)
 	mustStatus(t, resp, http.StatusOK)
 	resp.Body.Close()
 
-	// Second checkout (replay) — must be rejected with 409
+	// Second checkout with the same idempotency key should replay the successful result.
 	resp = doJSON(t, http.MethodPost, base+"/api/v1/bookings/checkout",
-		map[string]string{"holdId": holdID}, token)
-	if resp.StatusCode != http.StatusConflict {
+		payload, token)
+	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
-		t.Fatalf("expected 409 on replay checkout, got %d — body: %s", resp.StatusCode, body)
+		t.Fatalf("expected 200 on idempotent replay checkout, got %d — body: %s", resp.StatusCode, body)
 	}
 	resp.Body.Close()
 }
@@ -509,7 +599,7 @@ func TestBookingFlow_GetBookings_IsolatedByUser(t *testing.T) {
 	mustDecode(t, resp, &holdBody)
 
 	resp = doJSON(t, http.MethodPost, base+"/api/v1/bookings/checkout",
-		map[string]string{"holdId": holdBody.Hold.HoldID}, tokenA)
+		checkoutPayload(holdBody.Hold.HoldID), tokenA)
 	mustStatus(t, resp, http.StatusOK)
 	resp.Body.Close()
 
@@ -646,7 +736,7 @@ func TestBookingFlow_CancelBooking(t *testing.T) {
 	mustDecode(t, resp, &holdBody)
 
 	resp = doJSON(t, http.MethodPost, base+"/api/v1/bookings/checkout",
-		map[string]string{"holdId": holdBody.Hold.HoldID}, token)
+		checkoutPayload(holdBody.Hold.HoldID), token)
 	mustStatus(t, resp, http.StatusOK)
 	var checkoutBody struct {
 		Booking struct {

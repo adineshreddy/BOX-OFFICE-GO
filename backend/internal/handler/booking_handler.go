@@ -215,6 +215,10 @@ func (h *BookingHandler) CancelBooking(w http.ResponseWriter, r *http.Request) {
 			response.Error(w, http.StatusConflict, "booking is already cancelled", nil)
 			return
 		}
+		if errors.Is(err, repository.ErrCancellationWindowClosed) {
+			response.Error(w, http.StatusConflict, "booking can only be cancelled at least 1 hour before showtime", nil)
+			return
+		}
 		handleBookingError(w, err)
 		return
 	}
