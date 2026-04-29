@@ -9,6 +9,8 @@ import (
 
 	"box-office-go/backend/internal/domain"
 	"box-office-go/backend/internal/repository"
+
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 type BookingRepository struct {
@@ -554,6 +556,13 @@ func (r *BookingRepository) CreatePaymentTransaction(ctx context.Context, txn do
 		txn.IdempotencyKey,
 		txn.CreatedAt,
 	)
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			return repository.ErrDuplicatePayment
+		}
+		return err
+	}
 	return err
 }
 

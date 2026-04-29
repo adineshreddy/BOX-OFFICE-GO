@@ -129,6 +129,10 @@ func handleBookingError(w http.ResponseWriter, err error) {
 		response.Error(w, http.StatusBadRequest, errMessage, nil)
 		return
 	}
+	if strings.Contains(errMessage, "idempotencyKey") {
+		response.Error(w, http.StatusConflict, errMessage, nil)
+		return
+	}
 
 	response.Error(w, http.StatusInternalServerError, "booking operation failed", nil)
 }

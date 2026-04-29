@@ -29,21 +29,23 @@ import (
 // ---------------------------------------------------------------------------
 
 type integrationBookingRepo struct {
-	mu        sync.Mutex
-	holds     map[string]domain.BookingHold
-	bookings  map[string]domain.BookingCheckoutResult
-	confirmed map[string]bool            // holdIDs already finalized
-	heldSeats map[string]map[string]bool // showtimeID → seat → held
-	payments  map[string]domain.PaymentTransaction
+	mu                   sync.Mutex
+	holds                map[string]domain.BookingHold
+	bookings             map[string]domain.BookingCheckoutResult
+	confirmed            map[string]bool            // holdIDs already finalized
+	heldSeats            map[string]map[string]bool // showtimeID → seat → held
+	paymentByID          map[string]domain.PaymentTransaction
+	paymentByIdempotency map[string]string // idempotencyKey -> txnID
 }
 
 func newIntegrationBookingRepo() *integrationBookingRepo {
 	return &integrationBookingRepo{
-		holds:     make(map[string]domain.BookingHold),
-		bookings:  make(map[string]domain.BookingCheckoutResult),
-		confirmed: make(map[string]bool),
-		heldSeats: make(map[string]map[string]bool),
-		payments:  make(map[string]domain.PaymentTransaction),
+		holds:                make(map[string]domain.BookingHold),
+		bookings:             make(map[string]domain.BookingCheckoutResult),
+		confirmed:            make(map[string]bool),
+		heldSeats:            make(map[string]map[string]bool),
+		paymentByID:          make(map[string]domain.PaymentTransaction),
+		paymentByIdempotency: make(map[string]string),
 	}
 }
 
@@ -74,6 +76,7 @@ func (r *integrationBookingRepo) CreateHold(_ context.Context, input domain.Crea
 		SeatNumbers:   input.SeatNumbers,
 		Status:        domain.BookingHoldStatusHeld,
 		HoldExpiresAt: holdExpiresAt,
+		TotalAmount:   float64(len(input.SeatNumbers)) * 12.50,
 		CreatedAt:     time.Now().UTC(),
 	}
 	r.holds[holdID] = hold
@@ -96,6 +99,7 @@ func (r *integrationBookingRepo) CheckoutHold(_ context.Context, holdID string, 
 	}
 
 	r.confirmed[holdID] = true
+	now := time.Now().UTC()
 	result := domain.BookingCheckoutResult{
 		BookingID:   bookingID,
 		HoldID:      holdID,
@@ -103,8 +107,12 @@ func (r *integrationBookingRepo) CheckoutHold(_ context.Context, holdID string, 
 		ShowtimeID:  hold.ShowtimeID,
 		SeatNumbers: hold.SeatNumbers,
 		Status:      domain.BookingHoldStatusConfirmed,
+		TotalAmount: hold.TotalAmount,
+		ConfirmedAt: now,
 	}
 	r.bookings[bookingID] = result
+	hold.Status = domain.BookingHoldStatusConfirmed
+	r.holds[holdID] = hold
 	return result, nil
 }
 
@@ -136,23 +144,34 @@ func (r *integrationBookingRepo) CancelBooking(_ context.Context, bookingID stri
 	if !ok || b.UserID != userID {
 		return repository.ErrBookingNotFound
 	}
+	if b.Status == "CANCELLED" {
+		return repository.ErrBookingAlreadyCancelled
+	}
+	b.Status = "CANCELLED"
+	r.bookings[bookingID] = b
 	return nil
 }
 
 func (r *integrationBookingRepo) CreatePaymentTransaction(_ context.Context, txn domain.PaymentTransaction) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.payments[txn.IdempotencyKey] = txn
+
+	if _, exists := r.paymentByIdempotency[txn.IdempotencyKey]; exists {
+		return repository.ErrDuplicatePayment
+	}
+	r.paymentByID[txn.ID] = txn
+	r.paymentByIdempotency[txn.IdempotencyKey] = txn.ID
 	return nil
 }
 
 func (r *integrationBookingRepo) GetPaymentByIdempotencyKey(_ context.Context, key string) (*domain.PaymentTransaction, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	txn, ok := r.payments[key]
+	txnID, ok := r.paymentByIdempotency[key]
 	if !ok {
 		return nil, nil
 	}
+	txn := r.paymentByID[txnID]
 	copyTxn := txn
 	return &copyTxn, nil
 }
@@ -160,17 +179,16 @@ func (r *integrationBookingRepo) GetPaymentByIdempotencyKey(_ context.Context, k
 func (r *integrationBookingRepo) UpdatePaymentStatus(_ context.Context, txnID string, status string, gatewayTxnID string, failureReason string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	for key, txn := range r.payments {
-		if txn.ID == txnID {
-			txn.Status = status
-			txn.GatewayTxnID = gatewayTxnID
-			txn.FailureReason = failureReason
-			txn.UpdatedAt = time.Now().UTC()
-			r.payments[key] = txn
-			return nil
-		}
+	txn, ok := r.paymentByID[txnID]
+	if !ok {
+		return repository.ErrPaymentNotFound
 	}
-	return repository.ErrPaymentNotFound
+	txn.Status = status
+	txn.GatewayTxnID = gatewayTxnID
+	txn.FailureReason = failureReason
+	txn.UpdatedAt = time.Now().UTC()
+	r.paymentByID[txnID] = txn
+	return nil
 }
 
 func (r *integrationBookingRepo) GetHoldDetails(_ context.Context, holdID string, userID string) (domain.BookingHold, error) {
@@ -190,8 +208,16 @@ func (r *integrationBookingRepo) ReleaseHold(_ context.Context, holdID string, u
 	if !ok || hold.UserID != userID {
 		return repository.ErrHoldNotFound
 	}
-	if hold.Status != domain.BookingHoldStatusHeld {
+	if hold.Status == domain.BookingHoldStatusConfirmed {
+		return repository.ErrHoldFinalized
+	}
+	if hold.Status == domain.BookingHoldStatusExpired {
 		return repository.ErrHoldAlreadyReleased
+	}
+
+	held := r.heldSeats[hold.ShowtimeID]
+	for _, seat := range hold.SeatNumbers {
+		delete(held, seat)
 	}
 	hold.Status = domain.BookingHoldStatusExpired
 	r.holds[holdID] = hold
@@ -201,16 +227,24 @@ func (r *integrationBookingRepo) ReleaseHold(_ context.Context, holdID string, u
 func (r *integrationBookingRepo) GetBookingForTicket(_ context.Context, bookingID string) (domain.TicketData, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	booking, ok := r.bookings[bookingID]
+	b, ok := r.bookings[bookingID]
 	if !ok {
 		return domain.TicketData{}, repository.ErrBookingNotFound
 	}
 	return domain.TicketData{
-		BookingID:   booking.BookingID,
-		UserID:      booking.UserID,
-		SeatNumbers: booking.SeatNumbers,
-		Status:      booking.Status,
-		ConfirmedAt: time.Now().UTC(),
+		BookingID:   b.BookingID,
+		UserID:      b.UserID,
+		MovieTitle:  "Integration Test Movie",
+		TheaterName: "Integration Theater",
+		City:        "New York",
+		ScreenName:  "Screen 1",
+		ShowTime:    time.Now().UTC().Add(2 * time.Hour),
+		Language:    "EN",
+		Format:      "2D",
+		SeatNumbers: b.SeatNumbers,
+		TotalAmount: b.TotalAmount,
+		Status:      b.Status,
+		ConfirmedAt: b.ConfirmedAt,
 	}, nil
 }
 
@@ -308,14 +342,14 @@ func mustStatus(t *testing.T, resp *http.Response, want int) {
 	}
 }
 
-func checkoutPayload(holdID string) map[string]string {
+func checkoutPayload(holdID string, idempotencyKey string) map[string]string {
 	return map[string]string{
 		"holdId":         holdID,
 		"paymentMethod":  "card",
 		"cardNumber":     "4111111111111111",
-		"cardExpiry":     "12/30",
+		"cardExpiry":     "12/29",
 		"cardCvv":        "123",
-		"idempotencyKey": fmt.Sprintf("idem_%d", time.Now().UnixNano()),
+		"idempotencyKey": idempotencyKey,
 	}
 }
 
@@ -381,8 +415,7 @@ func TestBookingFlow_HappyPath(t *testing.T) {
 	holdID := holdBody.Hold.HoldID
 
 	// Checkout the hold
-	checkoutPayload := checkoutPayload(holdID)
-	resp = doJSON(t, http.MethodPost, base+"/api/v1/bookings/checkout", checkoutPayload, token)
+	resp = doJSON(t, http.MethodPost, base+"/api/v1/bookings/checkout", checkoutPayload(holdID, "happy_checkout_1"), token)
 	mustStatus(t, resp, http.StatusOK)
 
 	var checkoutBody struct {
@@ -437,7 +470,7 @@ func TestBookingFlow_NoAuthToken(t *testing.T) {
 		body   any
 	}{
 		{http.MethodPost, "/api/v1/bookings/holds", map[string]any{"showtimeId": "st_1", "seatNumbers": []string{"A01"}}},
-		{http.MethodPost, "/api/v1/bookings/checkout", checkoutPayload("hold_1")},
+		{http.MethodPost, "/api/v1/bookings/checkout", checkoutPayload("hold_1", "no_auth_checkout")},
 		{http.MethodGet, "/api/v1/bookings", nil},
 	}
 
@@ -531,21 +564,72 @@ func TestBookingFlow_ReplayCheckout(t *testing.T) {
 	holdID := holdBody.Hold.HoldID
 
 	// First checkout — must succeed
-	payload := checkoutPayload(holdID)
 	resp = doJSON(t, http.MethodPost, base+"/api/v1/bookings/checkout",
-		payload, token)
+		checkoutPayload(holdID, "replay_checkout_1"), token)
 	mustStatus(t, resp, http.StatusOK)
 	resp.Body.Close()
 
-	// Second checkout with the same idempotency key should replay the successful result.
+	// Second checkout with a different idempotency key should be rejected as finalized hold.
 	resp = doJSON(t, http.MethodPost, base+"/api/v1/bookings/checkout",
-		payload, token)
-	if resp.StatusCode != http.StatusOK {
+		checkoutPayload(holdID, "replay_checkout_2"), token)
+	if resp.StatusCode != http.StatusConflict {
 		body, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
-		t.Fatalf("expected 200 on idempotent replay checkout, got %d — body: %s", resp.StatusCode, body)
+		t.Fatalf("expected 409 on replay checkout, got %d — body: %s", resp.StatusCode, body)
 	}
 	resp.Body.Close()
+}
+
+// TestBookingFlow_ReplayCheckout_SameIdempotencyKeyReturnsSameBooking verifies
+// deterministic replay semantics for network retries.
+func TestBookingFlow_ReplayCheckout_SameIdempotencyKeyReturnsSameBooking(t *testing.T) {
+	env := newTestEnv(t)
+	base := env.server.URL
+
+	token := signupAndLogin(t, base, "replay_same_key")
+
+	resp := doJSON(t, http.MethodPost, base+"/api/v1/bookings/holds",
+		map[string]any{"showtimeId": "st_replay_same_1", "seatNumbers": []string{"B02"}},
+		token)
+	mustStatus(t, resp, http.StatusCreated)
+
+	var holdBody struct {
+		Hold struct {
+			HoldID string `json:"holdId"`
+		} `json:"hold"`
+	}
+	mustDecode(t, resp, &holdBody)
+	holdID := holdBody.Hold.HoldID
+
+	key := "replay_same_key_1"
+	resp = doJSON(t, http.MethodPost, base+"/api/v1/bookings/checkout",
+		checkoutPayload(holdID, key), token)
+	mustStatus(t, resp, http.StatusOK)
+
+	var first struct {
+		Booking struct {
+			BookingID string `json:"bookingId"`
+		} `json:"booking"`
+	}
+	mustDecode(t, resp, &first)
+	if first.Booking.BookingID == "" {
+		t.Fatal("expected bookingId on first checkout")
+	}
+
+	resp = doJSON(t, http.MethodPost, base+"/api/v1/bookings/checkout",
+		checkoutPayload(holdID, key), token)
+	mustStatus(t, resp, http.StatusOK)
+
+	var second struct {
+		Booking struct {
+			BookingID string `json:"bookingId"`
+			Status    string `json:"status"`
+		} `json:"booking"`
+	}
+	mustDecode(t, resp, &second)
+	if second.Booking.Status != domain.BookingHoldStatusConfirmed {
+		t.Fatalf("expected CONFIRMED status on replay, got %s", second.Booking.Status)
+	}
 }
 
 // TestBookingFlow_SeatConflict verifies that two concurrent hold requests for
@@ -599,7 +683,7 @@ func TestBookingFlow_GetBookings_IsolatedByUser(t *testing.T) {
 	mustDecode(t, resp, &holdBody)
 
 	resp = doJSON(t, http.MethodPost, base+"/api/v1/bookings/checkout",
-		checkoutPayload(holdBody.Hold.HoldID), tokenA)
+		checkoutPayload(holdBody.Hold.HoldID, "isolation_checkout_1"), tokenA)
 	mustStatus(t, resp, http.StatusOK)
 	resp.Body.Close()
 
@@ -655,7 +739,7 @@ func TestBookingFlow_Checkout_MissingHoldID(t *testing.T) {
 	token := signupAndLogin(t, base, "checkout_missing")
 
 	resp := doJSON(t, http.MethodPost, base+"/api/v1/bookings/checkout",
-		map[string]string{}, token)
+		checkoutPayload("", "missing_hold_id"), token)
 	mustStatus(t, resp, http.StatusBadRequest)
 	resp.Body.Close()
 }
@@ -736,7 +820,7 @@ func TestBookingFlow_CancelBooking(t *testing.T) {
 	mustDecode(t, resp, &holdBody)
 
 	resp = doJSON(t, http.MethodPost, base+"/api/v1/bookings/checkout",
-		checkoutPayload(holdBody.Hold.HoldID), token)
+		checkoutPayload(holdBody.Hold.HoldID, "cancel_checkout_1"), token)
 	mustStatus(t, resp, http.StatusOK)
 	var checkoutBody struct {
 		Booking struct {
@@ -758,6 +842,75 @@ func TestBookingFlow_CancelBooking(t *testing.T) {
 	if cancelResp.StatusCode != http.StatusOK && cancelResp.StatusCode != http.StatusNoContent {
 		body, _ := io.ReadAll(cancelResp.Body)
 		t.Fatalf("expected 200/204 on cancel, got %d — body: %s", cancelResp.StatusCode, body)
+	}
+}
+
+// TestBookingFlow_TicketDownload verifies that the booking owner can download
+// ticket PDF and other users cannot access that booking ticket.
+func TestBookingFlow_TicketDownload(t *testing.T) {
+	env := newTestEnv(t)
+	base := env.server.URL
+
+	tokenA := signupAndLogin(t, base, "ticket_a")
+	tokenB := signupAndLogin(t, base, "ticket_b")
+
+	resp := doJSON(t, http.MethodPost, base+"/api/v1/bookings/holds",
+		map[string]any{"showtimeId": "st_ticket_1", "seatNumbers": []string{"F01"}},
+		tokenA)
+	mustStatus(t, resp, http.StatusCreated)
+
+	var holdBody struct {
+		Hold struct {
+			HoldID string `json:"holdId"`
+		} `json:"hold"`
+	}
+	mustDecode(t, resp, &holdBody)
+
+	resp = doJSON(t, http.MethodPost, base+"/api/v1/bookings/checkout",
+		checkoutPayload(holdBody.Hold.HoldID, "ticket_checkout_1"), tokenA)
+	mustStatus(t, resp, http.StatusOK)
+
+	var checkoutBody struct {
+		Booking struct {
+			BookingID string `json:"bookingId"`
+		} `json:"booking"`
+	}
+	mustDecode(t, resp, &checkoutBody)
+	bookingID := checkoutBody.Booking.BookingID
+
+	ticketURL := fmt.Sprintf("%s/api/v1/bookings/%s/ticket", base, bookingID)
+	req, _ := http.NewRequest(http.MethodGet, ticketURL, nil)
+	req.Header.Set("Authorization", "Bearer "+tokenA)
+
+	ticketResp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("ticket request: %v", err)
+	}
+	defer ticketResp.Body.Close()
+
+	if ticketResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(ticketResp.Body)
+		t.Fatalf("expected 200 ticket download for owner, got %d — body: %s", ticketResp.StatusCode, body)
+	}
+	if got := ticketResp.Header.Get("Content-Type"); got != "application/pdf" {
+		t.Fatalf("expected application/pdf content type, got %s", got)
+	}
+
+	pdfBytes, _ := io.ReadAll(ticketResp.Body)
+	if len(pdfBytes) == 0 || !bytes.HasPrefix(pdfBytes, []byte("%PDF")) {
+		t.Fatal("expected non-empty PDF bytes with %PDF header")
+	}
+
+	reqForbidden, _ := http.NewRequest(http.MethodGet, ticketURL, nil)
+	reqForbidden.Header.Set("Authorization", "Bearer "+tokenB)
+	forbiddenResp, err := http.DefaultClient.Do(reqForbidden)
+	if err != nil {
+		t.Fatalf("ticket forbidden request: %v", err)
+	}
+	defer forbiddenResp.Body.Close()
+	if forbiddenResp.StatusCode != http.StatusForbidden {
+		body, _ := io.ReadAll(forbiddenResp.Body)
+		t.Fatalf("expected 403 for non-owner ticket request, got %d — body: %s", forbiddenResp.StatusCode, body)
 	}
 }
 

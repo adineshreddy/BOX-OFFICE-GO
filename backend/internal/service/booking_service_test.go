@@ -44,6 +44,9 @@ func (s *bookingRepoStub) CheckoutHold(ctx context.Context, holdID string, userI
 	return s.checkoutHoldFn(ctx, holdID, userID, bookingID)
 }
 func (s *bookingRepoStub) ListByUserID(ctx context.Context, userID string) ([]domain.UserBooking, error) {
+	if s.listByUserIDFn == nil {
+		return nil, nil
+	}
 	return s.listByUserIDFn(ctx, userID)
 }
 func (s *bookingRepoStub) CancelBooking(ctx context.Context, bookingID string, userID string) error {
@@ -526,6 +529,20 @@ func TestCheckout_Idempotency_ReturnsPreviousSuccess(t *testing.T) {
 				IdempotencyKey: key,
 			}, nil
 		},
+		listByUserIDFn: func(_ context.Context, userID string) ([]domain.UserBooking, error) {
+			return []domain.UserBooking{
+				{
+					BookingID:   "bok_prev",
+					HoldID:      "hold_1",
+					UserID:      userID,
+					ShowtimeID:  "st_1",
+					SeatNumbers: []string{"A01", "A02"},
+					Status:      domain.BookingHoldStatusConfirmed,
+					TotalAmount: 12.50,
+					ConfirmedAt: time.Date(2026, 4, 29, 12, 0, 0, 0, time.UTC),
+				},
+			}, nil
+		},
 	}
 	svc := newTestService(repo)
 
@@ -538,8 +555,113 @@ func TestCheckout_Idempotency_ReturnsPreviousSuccess(t *testing.T) {
 	if result.TransactionID != "txn_prev" {
 		t.Fatalf("expected previous transactionID txn_prev, got %s", result.TransactionID)
 	}
+	if result.BookingID != "bok_prev" {
+		t.Fatalf("expected bookingID bok_prev, got %s", result.BookingID)
+	}
 	if result.Status != domain.BookingHoldStatusConfirmed {
 		t.Fatalf("expected CONFIRMED status, got %s", result.Status)
+	}
+}
+
+func TestCheckout_Idempotency_Pending_ReturnsConflictError(t *testing.T) {
+	repo := &bookingRepoStub{
+		getPaymentByIdempotencyFn: func(_ context.Context, key string) (*domain.PaymentTransaction, error) {
+			return &domain.PaymentTransaction{
+				ID:             "txn_pending",
+				HoldID:         "hold_1",
+				UserID:         "usr_1",
+				Amount:         12.50,
+				PaymentMethod:  "card",
+				Status:         domain.PaymentStatusPending,
+				IdempotencyKey: key,
+			}, nil
+		},
+	}
+	svc := newTestService(repo)
+
+	_, err := svc.CheckoutBookingHold(context.Background(), domain.ConfirmBookingInput{
+		HoldID: "hold_1", UserID: "usr_1", PaymentMethod: "card", CardNumber: "4111111111111111", CardExpiry: "12/29", CardCVV: "123", IdempotencyKey: "key_pending",
+	})
+	if err == nil || !strings.Contains(err.Error(), "idempotencyKey is already in progress") {
+		t.Fatalf("expected in-progress idempotency error, got %v", err)
+	}
+}
+
+func TestCheckout_Idempotency_Failed_ReturnsUseNewKeyError(t *testing.T) {
+	repo := &bookingRepoStub{
+		getPaymentByIdempotencyFn: func(_ context.Context, key string) (*domain.PaymentTransaction, error) {
+			return &domain.PaymentTransaction{
+				ID:             "txn_failed",
+				HoldID:         "hold_1",
+				UserID:         "usr_1",
+				Amount:         12.50,
+				PaymentMethod:  "card",
+				Status:         domain.PaymentStatusFailed,
+				IdempotencyKey: key,
+			}, nil
+		},
+	}
+	svc := newTestService(repo)
+
+	_, err := svc.CheckoutBookingHold(context.Background(), domain.ConfirmBookingInput{
+		HoldID: "hold_1", UserID: "usr_1", PaymentMethod: "card", CardNumber: "4111111111111111", CardExpiry: "12/29", CardCVV: "123", IdempotencyKey: "key_failed",
+	})
+	if err == nil || !strings.Contains(err.Error(), "use a new idempotencyKey") {
+		t.Fatalf("expected failed-idempotency retry guidance, got %v", err)
+	}
+}
+
+func TestCheckout_CreatePaymentDuplicate_ReplaysWithoutChargingAgain(t *testing.T) {
+	gatewayCalled := false
+	repo := &bookingRepoStub{
+		createPaymentTxnFn: func(_ context.Context, _ domain.PaymentTransaction) error {
+			return repository.ErrDuplicatePayment
+		},
+		getPaymentByIdempotencyFn: func(_ context.Context, key string) (*domain.PaymentTransaction, error) {
+			return &domain.PaymentTransaction{
+				ID:             "txn_existing",
+				HoldID:         "hold_1",
+				UserID:         "usr_1",
+				Amount:         12.50,
+				PaymentMethod:  "card",
+				Status:         domain.PaymentStatusSuccess,
+				IdempotencyKey: key,
+			}, nil
+		},
+		listByUserIDFn: func(_ context.Context, userID string) ([]domain.UserBooking, error) {
+			return []domain.UserBooking{
+				{
+					BookingID:   "bok_existing",
+					HoldID:      "hold_1",
+					UserID:      userID,
+					ShowtimeID:  "st_1",
+					SeatNumbers: []string{"A01"},
+					Status:      domain.BookingHoldStatusConfirmed,
+					TotalAmount: 12.50,
+					ConfirmedAt: time.Date(2026, 4, 29, 12, 30, 0, 0, time.UTC),
+				},
+			}, nil
+		},
+	}
+	gw := &gatewayStub{
+		chargeFn: func(_ context.Context, _ payment.ChargeRequest) (payment.ChargeResponse, error) {
+			gatewayCalled = true
+			return payment.ChargeResponse{}, nil
+		},
+	}
+	svc := newTestServiceWithGateway(repo, gw)
+
+	result, err := svc.CheckoutBookingHold(context.Background(), domain.ConfirmBookingInput{
+		HoldID: "hold_1", UserID: "usr_1", PaymentMethod: "card", CardNumber: "4111111111111111", CardExpiry: "12/29", CardCVV: "123", IdempotencyKey: "key_dup_race",
+	})
+	if err != nil {
+		t.Fatalf("expected success replay after duplicate insert, got %v", err)
+	}
+	if gatewayCalled {
+		t.Fatal("expected gateway not to be called for duplicate idempotency replay")
+	}
+	if result.BookingID != "bok_existing" || result.TransactionID != "txn_existing" {
+		t.Fatalf("unexpected replay result: %+v", result)
 	}
 }
 
