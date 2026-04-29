@@ -17,6 +17,7 @@ var (
 	ErrHoldAlreadyReleased     = errors.New("booking hold is already released")
 	ErrBookingNotFound         = errors.New("booking not found")
 	ErrBookingAlreadyCancelled = errors.New("booking is already cancelled")
+	ErrCancellationWindowClosed = errors.New("booking can only be cancelled at least 1 hour before showtime")
 	ErrBookingNotOwned         = errors.New("booking does not belong to the requesting user")
 	ErrDuplicatePayment        = errors.New("duplicate payment for this idempotency key")
 	ErrPaymentNotFound         = errors.New("payment transaction not found")

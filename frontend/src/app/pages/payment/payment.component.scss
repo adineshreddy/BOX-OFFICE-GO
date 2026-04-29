@@ -139,6 +139,18 @@
   background: rgba(15, 23, 42, 0.45);
 }
 
+.card-fields {
+  margin-top: 0.9rem;
+  display: grid;
+  gap: 0.8rem;
+}
+
+.card-meta {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
 label {
   display: block;
   margin-bottom: 0.45rem;
@@ -231,5 +243,9 @@ label {
 
   .payment-card h1 {
     font-size: 1.35rem;
+  }
+
+  .card-meta {
+    grid-template-columns: 1fr;
   }
 }

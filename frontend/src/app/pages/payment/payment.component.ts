@@ -21,6 +21,13 @@ export class PaymentComponent implements OnInit, OnDestroy {
   holdExpiresAt = signal<Date | null>(null);
 
   paymentMethod = signal('card');
+  cardNumber = signal('');
+  cardExpiry = signal('');
+  cardCvv = signal('');
+  upiId = signal('');
+  bankName = signal('');
+  accountNumber = signal('');
+  routingNumber = signal('');
   loading = signal(true);
   processing = signal(false);
   error = signal<string | null>(null);
@@ -84,10 +91,19 @@ export class PaymentComponent implements OnInit, OnDestroy {
     this.processing.set(true);
     this.error.set(null);
 
+    const normalizedPaymentDetails = this.getNormalizedPaymentDetails();
+    if (!normalizedPaymentDetails) {
+      this.processing.set(false);
+      return;
+    }
+
     this.bookingService
       .checkoutBookingHold({
         holdId,
         paymentMethod: this.paymentMethod(),
+        cardNumber: normalizedPaymentDetails.cardNumber,
+        cardExpiry: normalizedPaymentDetails.cardExpiry,
+        cardCvv: normalizedPaymentDetails.cardCvv,
         idempotencyKey: this.newIdempotencyKey()
       })
       .subscribe({
@@ -215,5 +231,98 @@ export class PaymentComponent implements OnInit, OnDestroy {
       return crypto.randomUUID();
     }
     return `idem_${Date.now()}`;
+  }
+
+  private getNormalizedPaymentDetails(): { cardNumber: string; cardExpiry: string; cardCvv: string } | null {
+    const method = this.paymentMethod();
+
+    if (method === 'card') {
+      const cardNumber = this.cardNumber().replace(/\s+/g, '').trim();
+      const cardExpiry = this.cardExpiry().trim();
+      const cardCvv = this.cardCvv().trim();
+      if (!cardNumber || !cardExpiry || !cardCvv) {
+        this.error.set('Card number, expiry and CVV are required.');
+        return null;
+      }
+      if (!/^\d{13,19}$/.test(cardNumber)) {
+        this.error.set('Card number must be 13 to 19 digits.');
+        return null;
+      }
+      if (!this.isValidExpiry(cardExpiry)) {
+        this.error.set('Expiry must be in MM/YY format and not in the past.');
+        return null;
+      }
+      if (!/^\d{3,4}$/.test(cardCvv)) {
+        this.error.set('CVV must be 3 or 4 digits.');
+        return null;
+      }
+      return { cardNumber, cardExpiry, cardCvv };
+    }
+
+    if (method === 'upi') {
+      const upiId = this.upiId().trim();
+      if (!upiId) {
+        this.error.set('UPI ID is required.');
+        return null;
+      }
+      if (!/^[a-zA-Z0-9.\-_]{2,}@[a-zA-Z]{2,}$/.test(upiId)) {
+        this.error.set('UPI ID must look like name@bank.');
+        return null;
+      }
+      return {
+        cardNumber: upiId,
+        cardExpiry: 'NA',
+        cardCvv: 'NA'
+      };
+    }
+
+    const bankName = this.bankName().trim();
+    const accountNumber = this.accountNumber().trim();
+    const routingNumber = this.routingNumber().trim();
+    if (!bankName || !accountNumber || !routingNumber) {
+      this.error.set('Bank name, account number and routing number are required.');
+      return null;
+    }
+    if (bankName.length < 2) {
+      this.error.set('Bank name must be at least 2 characters.');
+      return null;
+    }
+    if (!/^\d{6,18}$/.test(accountNumber)) {
+      this.error.set('Account number must be 6 to 18 digits.');
+      return null;
+    }
+    if (!/^\d{9}$/.test(routingNumber)) {
+      this.error.set('Routing number must be exactly 9 digits.');
+      return null;
+    }
+    return {
+      cardNumber: `${bankName}:${accountNumber}`,
+      cardExpiry: routingNumber,
+      cardCvv: 'NA'
+    };
+  }
+
+  private isValidExpiry(expiry: string): boolean {
+    const match = /^(\d{2})\/(\d{2})$/.exec(expiry);
+    if (!match) {
+      return false;
+    }
+    const month = Number(match[1]);
+    const year = Number(match[2]);
+    if (month < 1 || month > 12) {
+      return false;
+    }
+
+    const now = new Date();
+    const currentMonth = now.getMonth() + 1;
+    const currentYear = now.getFullYear() % 100;
+
+    if (year < currentYear) {
+      return false;
+    }
+    if (year === currentYear && month < currentMonth) {
+      return false;
+    }
+    return true;
   }
 }

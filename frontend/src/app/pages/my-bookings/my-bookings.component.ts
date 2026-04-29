@@ -1,5 +1,6 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnInit, signal } from '@angular/core';
+import { Component, OnInit, computed, signal } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
 import { BookingService, UserBooking } from '../../services/booking.service';
@@ -8,12 +9,15 @@ import { ToastService } from '../../services/toast.service';
 @Component({
   selector: 'app-my-bookings',
   standalone: true,
-  imports: [CommonModule, RouterLink],
+  imports: [CommonModule, FormsModule, RouterLink],
   templateUrl: './my-bookings.component.html',
   styleUrl: './my-bookings.component.scss'
 })
 export class MyBookingsComponent implements OnInit {
   bookings = signal<UserBooking[]>([]);
+  searchQuery = signal('');
+  statusFilter = signal<'ALL' | 'CONFIRMED' | 'CANCELLED'>('ALL');
+  sortBy = signal<'showtime_desc' | 'showtime_asc' | 'confirmed_desc'>('showtime_desc');
   loading = signal(true);
   listError = signal<string | null>(null);
 
@@ -23,6 +27,38 @@ export class MyBookingsComponent implements OnInit {
   cancellingId = signal<string | null>(null);
   cancelError = signal<string | null>(null);
 
+  readonly filteredBookings = computed(() => {
+    const query = this.searchQuery().trim().toLowerCase();
+    const status = this.statusFilter();
+    const sortBy = this.sortBy();
+
+    const filtered = this.bookings().filter(b => {
+      const normalizedStatus = (b.status ?? '').toUpperCase();
+      if (status !== 'ALL' && normalizedStatus !== status) {
+        return false;
+      }
+      if (!query) {
+        return true;
+      }
+      const haystack = [
+        b.movieTitle,
+        b.theaterName,
+        b.city,
+        b.screenName,
+        ...(b.seatNumbers ?? []),
+        b.bookingId
+      ]
+        .join(' ')
+        .toLowerCase();
+      return haystack.includes(query);
+    });
+
+    return filtered.sort((a, b) => this.compareBookings(a, b, sortBy));
+  });
+
+  readonly upcomingBookings = computed(() => this.filteredBookings().filter(b => !this.isPastShowtime(b)));
+  readonly pastBookings = computed(() => this.filteredBookings().filter(b => this.isPastShowtime(b)));
+
   constructor(
     private bookingService: BookingService,
     private toast: ToastService
@@ -30,6 +66,17 @@ export class MyBookingsComponent implements OnInit {
 
   ngOnInit(): void {
     this.loadBookings();
+  }
+
+  resultLabel(): string {
+    const count = this.filteredBookings().length;
+    if (count === 0) {
+      return 'No matching bookings';
+    }
+    if (count === 1) {
+      return '1 booking';
+    }
+    return `${count} bookings`;
   }
 
   loadBookings(): void {
@@ -55,7 +102,7 @@ export class MyBookingsComponent implements OnInit {
     return (b.status ?? '').toUpperCase() === 'CONFIRMED';
   }
 
-  /** Cancellation is only allowed before the show starts (same rule as the API). */
+  /** Cancellation is only allowed >= 1 hour before showtime (same rule as the API). */
   canCancel(b: UserBooking): boolean {
     if (!this.isConfirmed(b)) {
       return false;
@@ -68,7 +115,7 @@ export class MyBookingsComponent implements OnInit {
     if (Number.isNaN(d.getTime())) {
       return true;
     }
-    return d.getTime() > Date.now();
+    return d.getTime() - Date.now() >= 60 * 60 * 1000;
   }
 
   formatWhen(b: UserBooking): string {
@@ -100,6 +147,14 @@ export class MyBookingsComponent implements OnInit {
       return raw;
     }
     return d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+  }
+
+  isPastShowtime(b: UserBooking): boolean {
+    const showtimeMs = this.getShowtimeTimestamp(b);
+    if (showtimeMs === null) {
+      return false;
+    }
+    return showtimeMs <= Date.now();
   }
 
   downloadTicket(bookingId: string): void {
@@ -154,5 +209,42 @@ export class MyBookingsComponent implements OnInit {
         this.cancelError.set(msg ?? 'Could not cancel this booking.');
       }
     });
+  }
+
+  private compareBookings(
+    a: UserBooking,
+    b: UserBooking,
+    sortBy: 'showtime_desc' | 'showtime_asc' | 'confirmed_desc'
+  ): number {
+    const aShowtime = this.getShowtimeTimestamp(a) ?? 0;
+    const bShowtime = this.getShowtimeTimestamp(b) ?? 0;
+    const aConfirmed = this.getConfirmedTimestamp(a) ?? 0;
+    const bConfirmed = this.getConfirmedTimestamp(b) ?? 0;
+
+    if (sortBy === 'showtime_asc') {
+      return aShowtime - bShowtime;
+    }
+    if (sortBy === 'confirmed_desc') {
+      return bConfirmed - aConfirmed;
+    }
+    return bShowtime - aShowtime;
+  }
+
+  private getShowtimeTimestamp(b: UserBooking): number | null {
+    const raw = b.showTime;
+    if (!raw) {
+      return null;
+    }
+    const d = new Date(raw);
+    return Number.isNaN(d.getTime()) ? null : d.getTime();
+  }
+
+  private getConfirmedTimestamp(b: UserBooking): number | null {
+    const raw = b.confirmedAt;
+    if (!raw) {
+      return null;
+    }
+    const d = new Date(raw);
+    return Number.isNaN(d.getTime()) ? null : d.getTime();
   }
 }

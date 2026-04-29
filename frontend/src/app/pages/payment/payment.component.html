@@ -26,6 +26,112 @@
             <option value="upi">UPI</option>
             <option value="netbanking">Net banking</option>
           </select>
+
+          @if (paymentMethod() === 'card') {
+            <div class="card-fields">
+              <label for="card-number">Card number</label>
+              <input
+                id="card-number"
+                class="input"
+                type="text"
+                inputmode="numeric"
+                autocomplete="cc-number"
+                placeholder="1234 5678 9012 3456"
+                maxlength="23"
+                [ngModel]="cardNumber()"
+                (ngModelChange)="cardNumber.set($event)"
+              />
+
+              <div class="card-meta">
+                <div>
+                  <label for="card-expiry">Expiry</label>
+                  <input
+                    id="card-expiry"
+                    class="input"
+                    type="text"
+                    inputmode="numeric"
+                    autocomplete="cc-exp"
+                    placeholder="MM/YY"
+                    maxlength="5"
+                    [ngModel]="cardExpiry()"
+                    (ngModelChange)="cardExpiry.set($event)"
+                  />
+                </div>
+                <div>
+                  <label for="card-cvv">CVV</label>
+                  <input
+                    id="card-cvv"
+                    class="input"
+                    type="password"
+                    inputmode="numeric"
+                    autocomplete="cc-csc"
+                    placeholder="123"
+                    maxlength="4"
+                    [ngModel]="cardCvv()"
+                    (ngModelChange)="cardCvv.set($event)"
+                  />
+                </div>
+              </div>
+            </div>
+          } @else if (paymentMethod() === 'upi') {
+            <div class="card-fields">
+              <label for="upi-id">UPI ID</label>
+              <input
+                id="upi-id"
+                class="input"
+                type="text"
+                autocomplete="off"
+                placeholder="name@bank"
+                maxlength="50"
+                [ngModel]="upiId()"
+                (ngModelChange)="upiId.set($event)"
+              />
+            </div>
+          } @else {
+            <div class="card-fields">
+              <label for="bank-name">Bank name</label>
+              <input
+                id="bank-name"
+                class="input"
+                type="text"
+                autocomplete="organization"
+                placeholder="Example Bank"
+                [ngModel]="bankName()"
+                (ngModelChange)="bankName.set($event)"
+              />
+
+              <div class="card-meta">
+                <div>
+                  <label for="account-number">Account number</label>
+                  <input
+                    id="account-number"
+                    class="input"
+                    type="text"
+                    inputmode="numeric"
+                    autocomplete="off"
+                    placeholder="123456789"
+                    maxlength="18"
+                    [ngModel]="accountNumber()"
+                    (ngModelChange)="accountNumber.set($event)"
+                  />
+                </div>
+                <div>
+                  <label for="routing-number">Routing number</label>
+                  <input
+                    id="routing-number"
+                    class="input"
+                    type="text"
+                    inputmode="numeric"
+                    autocomplete="off"
+                    placeholder="021000021"
+                    maxlength="9"
+                    [ngModel]="routingNumber()"
+                    (ngModelChange)="routingNumber.set($event)"
+                  />
+                </div>
+              </div>
+            </div>
+          }
         </div>
 
         <button class="pay-btn" type="button" [disabled]="processing() || timedOut() || checkoutCompleted()" (click)="submitPayment()">

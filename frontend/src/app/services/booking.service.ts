@@ -32,7 +32,14 @@ export class BookingService {
     );
   }
 
-  checkoutBookingHold(data: { holdId: string; paymentMethod: string; idempotencyKey: string }) {
+  checkoutBookingHold(data: {
+    holdId: string;
+    paymentMethod: string;
+    cardNumber: string;
+    cardExpiry: string;
+    cardCvv: string;
+    idempotencyKey: string;
+  }) {
     return this.http.post<{
       message: string;
       booking: { bookingId: string; holdId: string; totalAmount: number; seatNumbers: string[]; status: string };

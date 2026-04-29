@@ -225,6 +225,9 @@ describe('Full booking flow: login through payment confirmation', () => {
     cy.url({ timeout: 10000 }).should('include', '/payment');
     cy.contains('Complete your payment', { timeout: 10000 }).should('be.visible');
 
+    cy.get('#card-number', { timeout: 10000 }).type('4111111111111111');
+    cy.get('#card-expiry').type('12/30');
+    cy.get('#card-cvv').type('123');
     cy.contains('button', 'Pay now', { timeout: 10000 }).click();
     cy.wait('@checkout');
 

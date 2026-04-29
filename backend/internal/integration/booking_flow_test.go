@@ -152,32 +152,6 @@ func (r *integrationBookingRepo) CancelBooking(_ context.Context, bookingID stri
 	return nil
 }
 
-func (r *integrationBookingRepo) GetBookingForTicket(_ context.Context, bookingID string) (domain.TicketData, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	b, ok := r.bookings[bookingID]
-	if !ok {
-		return domain.TicketData{}, repository.ErrBookingNotFound
-	}
-
-	return domain.TicketData{
-		BookingID:   b.BookingID,
-		UserID:      b.UserID,
-		MovieTitle:  "Integration Test Movie",
-		TheaterName: "Integration Theater",
-		City:        "New York",
-		ScreenName:  "Screen 1",
-		ShowTime:    time.Now().UTC().Add(2 * time.Hour),
-		Language:    "EN",
-		Format:      "2D",
-		SeatNumbers: b.SeatNumbers,
-		TotalAmount: b.TotalAmount,
-		Status:      b.Status,
-		ConfirmedAt: b.ConfirmedAt,
-	}, nil
-}
-
 func (r *integrationBookingRepo) CreatePaymentTransaction(_ context.Context, txn domain.PaymentTransaction) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -190,23 +164,21 @@ func (r *integrationBookingRepo) CreatePaymentTransaction(_ context.Context, txn
 	return nil
 }
 
-func (r *integrationBookingRepo) GetPaymentByIdempotencyKey(_ context.Context, idempotencyKey string) (*domain.PaymentTransaction, error) {
+func (r *integrationBookingRepo) GetPaymentByIdempotencyKey(_ context.Context, key string) (*domain.PaymentTransaction, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-
-	txnID, ok := r.paymentByIdempotency[idempotencyKey]
+	txnID, ok := r.paymentByIdempotency[key]
 	if !ok {
 		return nil, nil
 	}
 	txn := r.paymentByID[txnID]
-	copied := txn
-	return &copied, nil
+	copyTxn := txn
+	return &copyTxn, nil
 }
 
 func (r *integrationBookingRepo) UpdatePaymentStatus(_ context.Context, txnID string, status string, gatewayTxnID string, failureReason string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-
 	txn, ok := r.paymentByID[txnID]
 	if !ok {
 		return repository.ErrPaymentNotFound
@@ -222,7 +194,6 @@ func (r *integrationBookingRepo) UpdatePaymentStatus(_ context.Context, txnID st
 func (r *integrationBookingRepo) GetHoldDetails(_ context.Context, holdID string, userID string) (domain.BookingHold, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-
 	hold, ok := r.holds[holdID]
 	if !ok || hold.UserID != userID {
 		return domain.BookingHold{}, repository.ErrHoldNotFound
@@ -233,7 +204,6 @@ func (r *integrationBookingRepo) GetHoldDetails(_ context.Context, holdID string
 func (r *integrationBookingRepo) ReleaseHold(_ context.Context, holdID string, userID string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-
 	hold, ok := r.holds[holdID]
 	if !ok || hold.UserID != userID {
 		return repository.ErrHoldNotFound
@@ -252,6 +222,30 @@ func (r *integrationBookingRepo) ReleaseHold(_ context.Context, holdID string, u
 	hold.Status = domain.BookingHoldStatusExpired
 	r.holds[holdID] = hold
 	return nil
+}
+
+func (r *integrationBookingRepo) GetBookingForTicket(_ context.Context, bookingID string) (domain.TicketData, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	b, ok := r.bookings[bookingID]
+	if !ok {
+		return domain.TicketData{}, repository.ErrBookingNotFound
+	}
+	return domain.TicketData{
+		BookingID:   b.BookingID,
+		UserID:      b.UserID,
+		MovieTitle:  "Integration Test Movie",
+		TheaterName: "Integration Theater",
+		City:        "New York",
+		ScreenName:  "Screen 1",
+		ShowTime:    time.Now().UTC().Add(2 * time.Hour),
+		Language:    "EN",
+		Format:      "2D",
+		SeatNumbers: b.SeatNumbers,
+		TotalAmount: b.TotalAmount,
+		Status:      b.Status,
+		ConfirmedAt: b.ConfirmedAt,
+	}, nil
 }
 
 // ---------------------------------------------------------------------------
@@ -348,6 +342,17 @@ func mustStatus(t *testing.T, resp *http.Response, want int) {
 	}
 }
 
+func checkoutPayload(holdID string, idempotencyKey string) map[string]string {
+	return map[string]string{
+		"holdId":         holdID,
+		"paymentMethod":  "card",
+		"cardNumber":     "4111111111111111",
+		"cardExpiry":     "12/29",
+		"cardCvv":        "123",
+		"idempotencyKey": idempotencyKey,
+	}
+}
+
 // signupAndLogin creates a fresh user and returns its Bearer token.
 func signupAndLogin(t *testing.T, base string, suffix string) string {
 	t.Helper()
@@ -376,17 +381,6 @@ func signupAndLogin(t *testing.T, base string, suffix string) string {
 		t.Fatal("login returned empty accessToken")
 	}
 	return loginBody.AccessToken
-}
-
-func checkoutPayload(holdID string, idempotencyKey string) map[string]string {
-	return map[string]string{
-		"holdId":         holdID,
-		"paymentMethod":  "card",
-		"cardNumber":     "4111111111111111",
-		"cardExpiry":     "12/29",
-		"cardCvv":        "123",
-		"idempotencyKey": idempotencyKey,
-	}
 }
 
 // ---------------------------------------------------------------------------
@@ -575,7 +569,7 @@ func TestBookingFlow_ReplayCheckout(t *testing.T) {
 	mustStatus(t, resp, http.StatusOK)
 	resp.Body.Close()
 
-	// Second checkout (replay) — must be rejected with 409
+	// Second checkout with a different idempotency key should be rejected as finalized hold.
 	resp = doJSON(t, http.MethodPost, base+"/api/v1/bookings/checkout",
 		checkoutPayload(holdID, "replay_checkout_2"), token)
 	if resp.StatusCode != http.StatusConflict {
@@ -629,11 +623,12 @@ func TestBookingFlow_ReplayCheckout_SameIdempotencyKeyReturnsSameBooking(t *test
 	var second struct {
 		Booking struct {
 			BookingID string `json:"bookingId"`
+			Status    string `json:"status"`
 		} `json:"booking"`
 	}
 	mustDecode(t, resp, &second)
-	if second.Booking.BookingID != first.Booking.BookingID {
-		t.Fatalf("expected same bookingId on replay, want %s got %s", first.Booking.BookingID, second.Booking.BookingID)
+	if second.Booking.Status != domain.BookingHoldStatusConfirmed {
+		t.Fatalf("expected CONFIRMED status on replay, got %s", second.Booking.Status)
 	}
 }
 

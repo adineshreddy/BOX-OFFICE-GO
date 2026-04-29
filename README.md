@@ -3,6 +3,42 @@
 ## Project Description
 BoxOfficeGo is a movie ticket booking platform with a Go-based backend and an Angular frontend. The system will allow users to browse movies and showtimes, select seats, and book tickets, while admins can manage movies, theaters, and pricing.
 
+## Requirements
+- Go 1.22+
+- Node.js 20+ and npm
+- Neon Postgres database URL for backend (`DATABASE_URL`)
+
+## Run Application
+1. **Start backend**
+   - `cd backend`
+   - copy env template once: `cp .env.example .env`
+   - set `DATABASE_URL` in `backend/.env`
+   - run: `go run ./cmd/api`
+   - backend runs on `http://localhost:8080`
+2. **Start frontend**
+   - open new terminal, `cd frontend`
+   - install deps: `npm install`
+   - run dev server: `npm start`
+   - frontend runs on `http://localhost:4200`
+
+## How to Use
+- Sign up or log in from the home page.
+- Browse movies and open a movie details page.
+- Pick theater/showtime and continue to seat selection.
+- Select seats and continue to checkout.
+- Complete payment with:
+  - payment method
+  - card number
+  - card expiry (MM/YY)
+  - card CVV
+- After payment success, view booking confirmation and download ticket PDF.
+- Visit **My Bookings** to view, cancel, or download tickets for existing bookings.
+
+## Testing
+- Frontend unit tests: `cd frontend && npm test`
+- Frontend e2e tests: `cd frontend && npm run cypress:run`
+- Backend tests: `cd backend && go test ./...`
+
 ## Members
 ### Front-end
 
@@ -45,12 +81,4 @@ BoxOfficeGo is a movie ticket booking platform with a Go-based backend and an An
 		</tr>
 	</tbody>
 </table>
-
-## Planned Features
-- User authentication (signup/login/logout)
-- Browse movies with search, filter, and sort
-- Movie details with showtimes and pricing
-- Seat selection and ticket booking
-- Booking management (view/cancel/download ticket)
-- Admin management for movies, theaters, and pricing tiers
 
