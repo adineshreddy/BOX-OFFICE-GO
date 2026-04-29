@@ -52,6 +52,9 @@ func (s *bookingRepoHandlerStub) CheckoutHold(ctx context.Context, holdID string
 }
 
 func (s *bookingRepoHandlerStub) ListByUserID(ctx context.Context, userID string) ([]domain.UserBooking, error) {
+	if s.listByUserIDFn == nil {
+		return nil, nil
+	}
 	return s.listByUserIDFn(ctx, userID)
 }
 
@@ -439,6 +442,30 @@ func TestCheckoutHandler_MissingIdempotencyKey_Returns400(t *testing.T) {
 	h.CheckoutBookingHold(rec, req)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestCheckoutHandler_IdempotencyInProgress_Returns409(t *testing.T) {
+	h := newBookingHandlerForTest(&bookingRepoHandlerStub{
+		getPaymentByIdempotencyFn: func(_ context.Context, key string) (*domain.PaymentTransaction, error) {
+			return &domain.PaymentTransaction{
+				ID:             "txn_pending",
+				HoldID:         "hold_1",
+				UserID:         "usr_1",
+				Status:         domain.PaymentStatusPending,
+				IdempotencyKey: key,
+			}, nil
+		},
+	})
+
+	payload := []byte(`{"holdId":"hold_1","paymentMethod":"card","cardNumber":"4111111111111111","cardExpiry":"12/29","cardCvv":"123","idempotencyKey":"same_key"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/bookings/checkout", bytes.NewReader(payload))
+	req = withAuth(req, "usr_1")
+	rec := httptest.NewRecorder()
+
+	h.CheckoutBookingHold(rec, req)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("expected 409, got %d body=%s", rec.Code, rec.Body.String())
 	}
 }
 
