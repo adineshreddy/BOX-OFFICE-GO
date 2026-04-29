@@ -19,8 +19,28 @@ func NewMovieService(movieRepository repository.MovieRepository) *MovieService {
 	return &MovieService{movieRepository: movieRepository}
 }
 
-func (s *MovieService) ListMovies(ctx context.Context, titleQuery string, genreQuery string) ([]domain.Movie, error) {
-	return s.movieRepository.ListActive(ctx, titleQuery, genreQuery)
+const (
+	defaultMoviePage  = 1
+	defaultMovieLimit = 20
+	maxMovieLimit     = 100
+)
+
+func (s *MovieService) ListMovies(ctx context.Context, q domain.MovieListQuery) (domain.MovieListResponse, error) {
+	// Apply defaults
+	if q.Page < 1 {
+		q.Page = defaultMoviePage
+	}
+	if q.Limit < 1 {
+		q.Limit = defaultMovieLimit
+	}
+	if q.Limit > maxMovieLimit {
+		q.Limit = maxMovieLimit
+	}
+	if !domain.ValidMovieSortFields[q.SortBy] {
+		q.SortBy = domain.MovieSortByReleaseDate
+	}
+
+	return s.movieRepository.ListActive(ctx, q)
 }
 
 func (s *MovieService) GetMovieByID(ctx context.Context, movieID string) (domain.Movie, error) {

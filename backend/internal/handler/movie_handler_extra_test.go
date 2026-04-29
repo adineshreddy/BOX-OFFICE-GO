@@ -22,11 +22,11 @@ type movieRepoExtraStub struct {
 	listShowtimeRecordsErr error
 }
 
-func (s movieRepoExtraStub) ListActive(_ context.Context, _, _ string) ([]domain.Movie, error) {
+func (s movieRepoExtraStub) ListActive(_ context.Context, q domain.MovieListQuery) (domain.MovieListResponse, error) {
 	if s.listActiveErr != nil {
-		return nil, s.listActiveErr
+		return domain.MovieListResponse{}, s.listActiveErr
 	}
-	return []domain.Movie{{ID: "mov_1", Title: "Movie"}}, nil
+	return domain.MovieListResponse{Movies: []domain.Movie{{ID: "mov_1", Title: "Movie"}}, Page: q.Page, Limit: q.Limit, Total: 1}, nil
 }
 func (s movieRepoExtraStub) GetByID(_ context.Context, movieID string) (domain.Movie, error) {
 	if s.getByIDErr != nil {

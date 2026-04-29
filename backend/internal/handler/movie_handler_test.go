@@ -15,8 +15,13 @@ import (
 
 type movieRepoHandlerStub struct{}
 
-func (movieRepoHandlerStub) ListActive(_ context.Context, _, _ string) ([]domain.Movie, error) {
-	return []domain.Movie{{ID: "mov_1", Title: "Movie"}}, nil
+func (movieRepoHandlerStub) ListActive(_ context.Context, q domain.MovieListQuery) (domain.MovieListResponse, error) {
+	return domain.MovieListResponse{
+		Movies: []domain.Movie{{ID: "mov_1", Title: "Movie"}},
+		Page:   q.Page,
+		Limit:  q.Limit,
+		Total:  1,
+	}, nil
 }
 func (movieRepoHandlerStub) GetByID(_ context.Context, movieID string) (domain.Movie, error) {
 	if movieID == "missing" {
@@ -68,5 +73,71 @@ func TestMovieHandlerGetShowDetails_MissingQuery(t *testing.T) {
 	h.GetShowDetailsBySelection(rec, req)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", rec.Code)
+	}
+}
+
+func TestListMoviesHandler_InvalidPage_Returns400(t *testing.T) {
+	h := NewMovieHandler(service.NewMovieService(movieRepoHandlerStub{}))
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/movies?page=abc", nil)
+	rec := httptest.NewRecorder()
+
+	h.ListMovies(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", rec.Code)
+	}
+}
+
+func TestListMoviesHandler_NegativePage_Returns400(t *testing.T) {
+	h := NewMovieHandler(service.NewMovieService(movieRepoHandlerStub{}))
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/movies?page=-1", nil)
+	rec := httptest.NewRecorder()
+
+	h.ListMovies(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", rec.Code)
+	}
+}
+
+func TestListMoviesHandler_InvalidLimit_Returns400(t *testing.T) {
+	h := NewMovieHandler(service.NewMovieService(movieRepoHandlerStub{}))
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/movies?limit=abc", nil)
+	rec := httptest.NewRecorder()
+
+	h.ListMovies(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", rec.Code)
+	}
+}
+
+func TestListMoviesHandler_LimitOver100_Returns400(t *testing.T) {
+	h := NewMovieHandler(service.NewMovieService(movieRepoHandlerStub{}))
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/movies?limit=101", nil)
+	rec := httptest.NewRecorder()
+
+	h.ListMovies(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", rec.Code)
+	}
+}
+
+func TestListMoviesHandler_InvalidSort_Returns400(t *testing.T) {
+	h := NewMovieHandler(service.NewMovieService(movieRepoHandlerStub{}))
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/movies?sort=popularity", nil)
+	rec := httptest.NewRecorder()
+
+	h.ListMovies(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", rec.Code)
+	}
+}
+
+func TestListMoviesHandler_ValidParams_Returns200(t *testing.T) {
+	h := NewMovieHandler(service.NewMovieService(movieRepoHandlerStub{}))
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/movies?page=2&limit=5&sort=title", nil)
+	rec := httptest.NewRecorder()
+
+	h.ListMovies(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
 	}
 }

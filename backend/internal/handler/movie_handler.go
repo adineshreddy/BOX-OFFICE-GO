@@ -3,8 +3,10 @@ package handler
 import (
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 
+	"box-office-go/backend/internal/domain"
 	"box-office-go/backend/internal/http/response"
 	"box-office-go/backend/internal/repository"
 	"box-office-go/backend/internal/service"
@@ -24,18 +26,64 @@ func (h *MovieHandler) ListMovies(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	query := r.URL.Query()
-	titleQuery := query.Get("title")
-	genreQuery := query.Get("genre")
+	q := r.URL.Query()
 
-	movies, err := h.movieService.ListMovies(r.Context(), titleQuery, genreQuery)
+	// ── page ──────────────────────────────────────────────────────────
+	page := 1
+	if raw := strings.TrimSpace(q.Get("page")); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil || parsed < 1 {
+			response.Error(w, http.StatusBadRequest, "page must be a positive integer", nil)
+			return
+		}
+		page = parsed
+	}
+
+	// ── limit ─────────────────────────────────────────────────────────
+	limit := 20
+	if raw := strings.TrimSpace(q.Get("limit")); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil || parsed < 1 {
+			response.Error(w, http.StatusBadRequest, "limit must be a positive integer", nil)
+			return
+		}
+		if parsed > 100 {
+			response.Error(w, http.StatusBadRequest, "limit must not exceed 100", nil)
+			return
+		}
+		limit = parsed
+	}
+
+	// ── sort ──────────────────────────────────────────────────────────
+	sortBy := domain.MovieSortByReleaseDate
+	if raw := strings.TrimSpace(q.Get("sort")); raw != "" {
+		if !domain.ValidMovieSortFields[raw] {
+			response.Error(w, http.StatusBadRequest, "sort must be one of: title, release_date, rating", nil)
+			return
+		}
+		sortBy = raw
+	}
+
+	movieQuery := domain.MovieListQuery{
+		Page:   page,
+		Limit:  limit,
+		SortBy: sortBy,
+		Title:  strings.TrimSpace(q.Get("title")),
+		Genre:  strings.TrimSpace(q.Get("genre")),
+	}
+
+	result, err := h.movieService.ListMovies(r.Context(), movieQuery)
 	if err != nil {
 		response.Error(w, http.StatusInternalServerError, "failed to fetch movies", nil)
 		return
 	}
 
 	response.JSON(w, http.StatusOK, map[string]any{
-		"movies": movies,
+		"movies":  result.Movies,
+		"page":    result.Page,
+		"limit":   result.Limit,
+		"total":   result.Total,
+		"hasNext": result.HasNext,
 	})
 }
 
