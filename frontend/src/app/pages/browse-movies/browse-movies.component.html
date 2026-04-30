@@ -1,0 +1,46 @@
+<div class="browse-page">
+  <div class="browse-inner">
+    <header class="browse-header">
+      <a routerLink="/" class="back-link">&larr; Home</a>
+      <div class="browse-title-block">
+        <h1 class="browse-title">All movies</h1>
+        <p class="browse-lede">
+          Full catalog playing at our theaters. Choose a poster to see showtimes.
+        </p>
+      </div>
+    </header>
+
+    @if (loadingMovies()) {
+      <p class="browse-status">Loading movies…</p>
+    } @else if (moviesError()) {
+      <p class="browse-status browse-error" role="alert">{{ moviesError() }}</p>
+    } @else if (movies().length === 0) {
+      <p class="browse-status">No movies available yet.</p>
+    } @else {
+      <div class="movie-grid">
+        @for (movie of movies(); track movie.id) {
+          <a class="movie-card" [routerLink]="['/movies', movie.id]">
+            <div class="movie-poster">
+              <img
+                class="movie-poster-img"
+                [src]="posterUrl(movie)"
+                [alt]="movie.title + ' poster'"
+                loading="lazy"
+                (error)="onPosterError($event)"
+              />
+              <div class="movie-overlay">
+                <span class="poster-meta">{{ movie.language }} · {{ movie.genre }}</span>
+              </div>
+            </div>
+            <div class="movie-info">
+              <h2 class="movie-title">{{ movie.title }}</h2>
+              <p class="movie-meta">
+                {{ movie.durationMinutes }} min · ⭐ {{ movie.rating | number: '1.1-1' }}
+              </p>
+            </div>
+          </a>
+        }
+      </div>
+    }
+  </div>
+</div>

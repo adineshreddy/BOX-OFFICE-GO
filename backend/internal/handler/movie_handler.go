@@ -194,7 +194,10 @@ func (h *MovieHandler) ListTheatersByMovie(w http.ResponseWriter, r *http.Reques
 		}
 
 		errMessage := err.Error()
-		if strings.Contains(errMessage, "date must be in YYYY-MM-DD format") || strings.Contains(errMessage, "movie id is required") {
+		if strings.Contains(errMessage, "date must be in YYYY-MM-DD format") ||
+			strings.Contains(errMessage, "movie id is required") ||
+			strings.Contains(errMessage, "date cannot be in the past") ||
+			strings.Contains(errMessage, "bookings are only available within the next 14 days") {
 			response.Error(w, http.StatusBadRequest, errMessage, nil)
 			return
 		}

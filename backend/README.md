@@ -150,7 +150,8 @@ Invalid password/email: HTTP `400` with `invalid email or password`.
 
 - **Method**: `GET`
 - **Path**: `/api/v1/movies/{movieId}/theaters`
-- **Optional Query**: `date=YYYY-MM-DD` (filters showtimes for that date)
+- **Optional Query**: `date=YYYY-MM-DD` (filters showtimes for that calendar day in the server’s local timezone)
+  - When `date` is provided, it must be **today through today + 14 days** (inclusive). Past dates or dates beyond that window return **HTTP 400** with an error message.
 
 Example:
 

@@ -26,7 +26,7 @@ export class MovieDetailComponent implements OnInit {
   movieError = signal<string | null>(null);
   showtimesError = signal<string | null>(null);
 
-  selectedDate = signal(this.todayYmd());
+  selectedDate = signal(this.clampToBookingWindow(this.todayYmd()));
 
   selectedShowtime = signal<{ showtime: ShowtimeItem; theater: TheaterSchedule } | null>(null);
 
@@ -45,20 +45,49 @@ export class MovieDetailComponent implements OnInit {
       }
       this.movieId.set(id);
       this.selectedShowtime.set(null);
+      this.selectedDate.set(this.clampToBookingWindow(this.selectedDate()));
       this.loadMovie(id);
       this.loadTheaters(id);
     });
   }
 
-  private todayYmd(): string {
+  /** Today in local calendar (YYYY-MM-DD). */
+  todayYmd(): string {
+    return this.toYmd(new Date());
+  }
+
+  /** Last day (inclusive) we sell tickets: today + 14 days, local calendar. */
+  maxBookingYmd(): string {
     const d = new Date();
+    d.setDate(d.getDate() + 14);
+    return this.toYmd(d);
+  }
+
+  private toYmd(d: Date): string {
     const y = d.getFullYear();
     const m = String(d.getMonth() + 1).padStart(2, '0');
     const day = String(d.getDate()).padStart(2, '0');
     return `${y}-${m}-${day}`;
   }
 
+  /** Keep chosen day within [today, today+14]. */
+  clampToBookingWindow(ymd: string): string {
+    const min = this.todayYmd();
+    const max = this.maxBookingYmd();
+    if (ymd < min) {
+      return min;
+    }
+    if (ymd > max) {
+      return max;
+    }
+    return ymd;
+  }
+
   onDateChange() {
+    const next = this.clampToBookingWindow(this.selectedDate());
+    if (next !== this.selectedDate()) {
+      this.selectedDate.set(next);
+    }
     this.selectedShowtime.set(null);
     this.loadTheaters(this.movieId());
   }

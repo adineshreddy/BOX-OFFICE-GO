@@ -37,10 +37,11 @@
                 inputmode="numeric"
                 autocomplete="cc-number"
                 placeholder="1234 5678 9012 3456"
-                maxlength="23"
+                maxlength="19"
                 [ngModel]="cardNumber()"
                 (ngModelChange)="cardNumber.set($event)"
               />
+              <p class="field-hint">15 digits (Amex) or 16 digits (Visa, Mastercard, etc.). Spaces optional.</p>
 
               <div class="card-meta">
                 <div>
