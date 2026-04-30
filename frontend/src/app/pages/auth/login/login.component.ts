@@ -32,7 +32,8 @@ export class LoginComponent {
       if (params['signedUp'] === 'true') {
         this.signInMessage = 'Account created. Please sign in.';
       } else if (params['from'] === 'see-all-movies') {
-        this.signInMessage = 'Sign in to browse the full movie catalog.';
+        this.signInMessage =
+          'The full catalog is public — sign in to book seats faster next time.';
       } else if (params['from'] === 'booking') {
         this.signInMessage = 'Sign in to continue booking your seats.';
       } else if (params['from'] === 'bookings') {
@@ -77,6 +78,10 @@ export class LoginComponent {
         }
         if (this.route.snapshot.queryParamMap.get('from') === 'bookings') {
           void this.router.navigate(['/bookings']);
+          return;
+        }
+        if (this.route.snapshot.queryParamMap.get('from') === 'see-all-movies') {
+          void this.router.navigate(['/movies']);
           return;
         }
         void this.router.navigate(['/']);

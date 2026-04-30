@@ -131,6 +131,30 @@ func TestMovieServiceListTheatersByMovie_InvalidDate(t *testing.T) {
 	}
 }
 
+func TestMovieServiceListTheatersByMovie_DatePastRejected(t *testing.T) {
+	svc := NewMovieService(&movieRepoStub{
+		getByIDFn: func(_ context.Context, _ string) (domain.Movie, error) {
+			return domain.Movie{ID: "mov_1", Title: "X", DurationMinutes: 100}, nil
+		},
+	})
+	past := time.Now().AddDate(0, 0, -2).Format("2006-01-02")
+	if _, err := svc.ListTheatersByMovie(context.Background(), "mov_1", past); err == nil {
+		t.Fatal("expected error for past date")
+	}
+}
+
+func TestMovieServiceListTheatersByMovie_DateBeyond14DaysRejected(t *testing.T) {
+	svc := NewMovieService(&movieRepoStub{
+		getByIDFn: func(_ context.Context, _ string) (domain.Movie, error) {
+			return domain.Movie{ID: "mov_1", Title: "X", DurationMinutes: 100}, nil
+		},
+	})
+	far := time.Now().AddDate(0, 0, 15).Format("2006-01-02")
+	if _, err := svc.ListTheatersByMovie(context.Background(), "mov_1", far); err == nil {
+		t.Fatal("expected error for date beyond 14-day window")
+	}
+}
+
 func TestMovieServiceListTheatersByMovie_ShowtimeGapValidation(t *testing.T) {
 	svc := NewMovieService(&movieRepoStub{
 		getByIDFn: func(_ context.Context, _ string) (domain.Movie, error) {

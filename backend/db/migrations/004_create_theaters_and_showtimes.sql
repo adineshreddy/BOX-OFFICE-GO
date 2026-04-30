@@ -118,10 +118,20 @@ templates AS (
         VALUES
             ('mov_001', 'th_001', 'Screen 1', '11 hours'::interval, 'English', '2D', 12.00::numeric),
             ('mov_001', 'th_002', 'Screen 2', '18 hours'::interval, 'English', 'IMAX', 12.00::numeric),
-            ('mov_002', 'th_001', 'Screen 2', '10 hours 30 minutes'::interval, 'Hindi', '2D', 12.00::numeric),
-            ('mov_002', 'th_004', 'Screen 3', '17 hours 30 minutes'::interval, 'Hindi', '2D', 12.00::numeric),
-            ('mov_003', 'th_003', 'Screen B', '12 hours 15 minutes'::interval, 'Telugu', '2D', 12.00::numeric),
-            ('mov_003', 'th_005', 'Screen 2', '19 hours 15 minutes'::interval, 'Telugu', '2D', 12.00::numeric)
+            ('mov_002', 'th_001', 'Screen 2', '10 hours 30 minutes'::interval, 'English', '2D', 12.00::numeric),
+            ('mov_002', 'th_004', 'Screen 3', '17 hours 30 minutes'::interval, 'English', '2D', 12.00::numeric),
+            ('mov_003', 'th_003', 'Screen B', '12 hours 15 minutes'::interval, 'English', '2D', 12.00::numeric),
+            ('mov_003', 'th_005', 'Screen 2', '19 hours 15 minutes'::interval, 'English', '2D', 12.00::numeric),
+            ('mov_004', 'th_001', 'Screen 3', '14 hours'::interval, 'English', '2D', 12.00::numeric),
+            ('mov_004', 'th_004', 'Screen 1', '20 hours'::interval, 'English', '3D', 12.00::numeric),
+            ('mov_005', 'th_002', 'Screen 3', '12 hours 45 minutes'::interval, 'English', '2D', 12.00::numeric),
+            ('mov_005', 'th_003', 'Screen C', '18 hours 45 minutes'::interval, 'English', '2D', 12.00::numeric),
+            ('mov_006', 'th_002', 'Screen 4', '16 hours'::interval, 'English', '2D', 12.00::numeric),
+            ('mov_006', 'th_004', 'Screen 4', '21 hours 30 minutes'::interval, 'English', '2D', 12.00::numeric),
+            ('mov_007', 'th_003', 'Screen A', '15 hours'::interval, 'English', '2D', 12.00::numeric),
+            ('mov_007', 'th_005', 'Screen 1', '20 hours 30 minutes'::interval, 'English', '2D', 12.00::numeric),
+            ('mov_008', 'th_001', 'Screen 4', '13 hours 15 minutes'::interval, 'English', '2D', 12.00::numeric),
+            ('mov_008', 'th_005', 'Screen 3', '22 hours'::interval, 'English', '2D', 12.00::numeric)
     ) AS t(movie_id, theater_id, screen_name, time_of_day, language, format, base_price)
 ),
 generated AS (

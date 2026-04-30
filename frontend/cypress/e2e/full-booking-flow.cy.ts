@@ -16,7 +16,7 @@ describe('Full booking flow: login through payment confirmation', () => {
 
     const movie = {
       id: 'mov_001',
-      title: 'Starlight',
+      title: 'Dune: Part Two',
       description: 'A test movie description',
       genre: 'Drama',
       language: 'English',

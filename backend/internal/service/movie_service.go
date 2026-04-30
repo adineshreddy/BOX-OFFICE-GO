@@ -87,9 +87,20 @@ func (s *MovieService) ListTheatersByMovie(ctx context.Context, movieID string, 
 
 	var parsedDate *time.Time
 	if strings.TrimSpace(showDate) != "" {
-		parsed, parseErr := time.Parse("2006-01-02", showDate)
+		loc := time.Local
+		parsed, parseErr := time.ParseInLocation("2006-01-02", showDate, loc)
 		if parseErr != nil {
 			return domain.MovieTheaterListResponse{}, fmt.Errorf("date must be in YYYY-MM-DD format")
+		}
+		now := time.Now().In(loc)
+		today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc)
+		latest := today.AddDate(0, 0, 14)
+		chosen := time.Date(parsed.Year(), parsed.Month(), parsed.Day(), 0, 0, 0, 0, loc)
+		if chosen.Before(today) {
+			return domain.MovieTheaterListResponse{}, fmt.Errorf("date cannot be in the past")
+		}
+		if chosen.After(latest) {
+			return domain.MovieTheaterListResponse{}, fmt.Errorf("bookings are only available within the next 14 days")
 		}
 		parsedDate = &parsed
 	}

@@ -62,7 +62,9 @@
       <div class="panel-intro">
         <p class="eyebrow">Book tickets</p>
         <h2 class="panel-title">Choose a showtime</h2>
-        <p class="panel-sub">Pick a date, then select a theater and time.</p>
+        <p class="panel-sub">
+          Showtimes for the next 14 days only — pick a date, then a theater and time.
+        </p>
       </div>
       <div class="date-control">
         <label class="date-label" for="show-date">Date</label>
@@ -71,6 +73,8 @@
             id="show-date"
             class="date-input"
             type="date"
+            [min]="todayYmd()"
+            [max]="maxBookingYmd()"
             [ngModel]="selectedDate()"
             (ngModelChange)="selectedDate.set($event); onDateChange()"
           />
