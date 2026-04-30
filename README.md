@@ -40,6 +40,15 @@ BoxOfficeGo is a movie ticket booking platform with a Go-based backend and an An
 - Frontend e2e tests: `cd frontend && npm run cypress:run`
 - Backend tests: `cd backend && go test ./...`
 
+## Git hooks (optional)
+From the repo root, enable shared hooks (currently removes a trailing `Made-with: Cursor` line from commit messages if your editor adds it):
+
+```bash
+git config core.hooksPath .githooks
+```
+
+This only affects this clone; it is not stored in the remote. Each teammate can run the command once after cloning.
+
 ## Members
 ### Front-end
 

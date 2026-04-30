@@ -1,0 +1,7 @@
+#!/bin/sh
+# Strips trailing "Made-with: Cursor" (any case) from commit messages.
+set -e
+msg_file=${1:?}
+[ -f "$msg_file" ] || exit 0
+command -v perl >/dev/null 2>&1 || exit 0
+perl -0777 -i -pe 's/\nMade-with:\s*Cursor\s*(\r?\n)?\z//mi' "$msg_file"
