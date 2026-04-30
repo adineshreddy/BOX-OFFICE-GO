@@ -244,8 +244,9 @@ export class PaymentComponent implements OnInit, OnDestroy {
         this.error.set('Card number, expiry and CVV are required.');
         return null;
       }
-      if (!/^\d{13,19}$/.test(cardNumber)) {
-        this.error.set('Card number must be 13 to 19 digits.');
+      // Typical cards: Visa/Mastercard/Discover 16 digits; American Express 15.
+      if (!/^\d{15,16}$/.test(cardNumber)) {
+        this.error.set('Card number must be 15 digits (Amex) or 16 digits (most cards).');
         return null;
       }
       if (!this.isValidExpiry(cardExpiry)) {

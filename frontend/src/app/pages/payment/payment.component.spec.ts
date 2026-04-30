@@ -137,6 +137,8 @@ describe('PaymentComponent', () => {
     component.submitPayment();
 
     expect(checkoutBookingHold).not.toHaveBeenCalled();
-    expect(component.error()).toBe('Card number must be 13 to 19 digits.');
+    expect(component.error()).toBe(
+      'Card number must be 15 digits (Amex) or 16 digits (most cards).'
+    );
   });
 });

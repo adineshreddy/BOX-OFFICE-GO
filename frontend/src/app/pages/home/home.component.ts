@@ -1,8 +1,7 @@
 import { Component, OnInit, OnDestroy, inject, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { Router, RouterLink } from '@angular/router';
+import { RouterLink } from '@angular/router';
 import { MovieService } from '../../services/movie.service';
-import { AuthService } from '../../services/auth.service';
 import { ApiMovie } from '../../models/movie.models';
 
 @Component({
@@ -13,15 +12,11 @@ import { ApiMovie } from '../../models/movie.models';
   styleUrl: './home.component.scss'
 })
 export class HomeComponent implements OnInit, OnDestroy {
-  private readonly router = inject(Router);
   private readonly movieService = inject(MovieService);
-  readonly auth = inject(AuthService);
 
   currentHeroIndex = signal(0);
   currentMoviePage = signal(0);
   moviesPerPage = 5;
-  /** When signed in, "See All" expands the row instead of sending users to login. */
-  catalogExpanded = signal(false);
   private autoRotateInterval?: number;
 
   movies = signal<ApiMovie[]>([]);
@@ -30,26 +25,17 @@ export class HomeComponent implements OnInit, OnDestroy {
 
   visibleMovies = computed(() => {
     const list = this.movies();
-    if (this.catalogExpanded()) {
-      return list;
-    }
     const start = this.currentMoviePage() * this.moviesPerPage;
     const end = start + this.moviesPerPage;
     return list.slice(start, end);
   });
 
   canGoNext = computed(() => {
-    if (this.catalogExpanded()) {
-      return false;
-    }
     const list = this.movies();
     return (this.currentMoviePage() + 1) * this.moviesPerPage < list.length;
   });
 
   canGoPrev = computed(() => {
-    if (this.catalogExpanded()) {
-      return false;
-    }
     return this.currentMoviePage() > 0;
   });
 
@@ -68,7 +54,7 @@ export class HomeComponent implements OnInit, OnDestroy {
       title: 'CHEERS',
       subtitle: 'Wish a Happy Birthday or Anniversary',
       description: 'on the Big Screen!',
-      buttonText: 'Book A Greeting',
+      buttonText: 'Coming Soon',
       bgColor: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
       textColor: '#fff',
       emoji: '🎂💕'
@@ -96,7 +82,8 @@ export class HomeComponent implements OnInit, OnDestroy {
     });
   }
 
-  readonly posterFallback = 'https://placehold.co/300x450/1e1b2e/a78bfa?text=Poster';
+  readonly posterFallback =
+    'https://placehold.co/300x450/312e81/f472b6?text=Poster';
 
   posterUrl(movie: ApiMovie): string {
     if (movie.posterUrl) {
@@ -170,14 +157,5 @@ export class HomeComponent implements OnInit, OnDestroy {
     if (this.canGoPrev()) {
       this.currentMoviePage.set(this.currentMoviePage() - 1);
     }
-  }
-
-  onSeeAllClick(event: Event) {
-    event.preventDefault();
-    if (this.auth.isLoggedIn()) {
-      this.catalogExpanded.update(v => !v);
-      return;
-    }
-    void this.router.navigate(['/login'], { queryParams: { from: 'see-all-movies' } });
   }
 }

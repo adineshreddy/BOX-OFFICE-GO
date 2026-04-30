@@ -269,10 +269,13 @@
   margin-bottom: 1.75rem;
   padding-bottom: 1.35rem;
   border-bottom: 1px solid var(--stroke);
+  min-width: 0;
 }
 
 .panel-intro {
   max-width: 26rem;
+  min-width: 0;
+  flex: 1 1 12rem;
 }
 .eyebrow {
   margin: 0 0 0.35rem;
@@ -301,7 +304,9 @@
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
-  min-width: 11rem;
+  flex: 0 1 16rem;
+  min-width: 0;
+  max-width: 100%;
 }
 .date-label {
   font-size: 0.68rem;
@@ -312,17 +317,25 @@
 }
 .date-input-wrap {
   position: relative;
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 .date-input {
+  box-sizing: border-box;
   width: 100%;
-  padding: 0.65rem 0.85rem;
+  max-width: 100%;
+  min-width: 0;
+  padding: 0.6rem 0.75rem;
   border-radius: 12px;
   border: 1px solid var(--stroke);
   background: rgba(0, 0, 0, 0.35);
   color: #f1f0f7;
-  font-family: inherit;
-  font-size: 0.9rem;
+  font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-size: 0.875rem;
   font-weight: 600;
+  line-height: 1.25;
   outline: none;
   transition:
     border-color 0.2s ease,

@@ -23,12 +23,13 @@ BoxOfficeGo is a movie ticket booking platform with a Go-based backend and an An
 
 ## How to Use
 - Sign up or log in from the home page.
-- Browse movies and open a movie details page.
+- Browse movies from the home carousel or open **Movies** in the header (`/movies`) for the full list; open a title for details.
+- On movie details, choose a **show date** within the next **14 days** (past dates and far-future dates are blocked in the UI and API).
 - Pick theater/showtime and continue to seat selection.
 - Select seats and continue to checkout.
 - Complete payment with:
   - payment method
-  - card number
+  - card number (**15** digits for Amex, **16** for most cards; test card `4111111111111111` is 16 digits)
   - card expiry (MM/YY)
   - card CVV
 - After payment success, view booking confirmation and download ticket PDF.

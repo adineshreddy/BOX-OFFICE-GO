@@ -20,15 +20,19 @@ func Connect(databaseURL string) (*sql.DB, error) {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
-	defer cancel()
+	pingCtx, pingCancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer pingCancel()
 
-	if err := db.PingContext(ctx); err != nil {
+	if err := db.PingContext(pingCtx); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("ping database: %w", err)
 	}
 
-	if err := ensureSchema(ctx, db); err != nil {
+	// Schema creation and seed queries can take longer than a simple connectivity check,
+	// especially on first run when Neon needs to wake cold compute.
+	schemaCtx, schemaCancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer schemaCancel()
+	if err := ensureSchema(schemaCtx, db); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("ensure schema: %w", err)
 	}
@@ -258,68 +262,131 @@ func ensureSchema(ctx context.Context, db *sql.DB) error {
 	VALUES
 		(
 			'mov_001',
-			'Starlight Horizon',
-			'A deep-space rescue mission turns into a fight for humanity’s survival.',
+			'Dune: Part Two',
+			'Paul Atreides unites with the Fremen of Arrakis to wage war against those who destroyed his family.',
 			'Sci-Fi',
 			'English',
-			128,
-			'2024-06-14',
-			8.4,
-			'https://placehold.co/500x750/0c1222/7dd3fc/png?text=Starlight+Horizon',
+			166,
+			'2024-03-01',
+			8.5,
+			'https://upload.wikimedia.org/wikipedia/en/5/52/Dune_Part_Two_poster.jpeg',
 			TRUE,
 			NOW(),
 			NOW()
 		),
 		(
 			'mov_002',
-			'Monsoon Diaries',
-			'An indie filmmaker uncovers family secrets during a monsoon season.',
-			'Drama',
-			'Hindi',
-			112,
-			'2023-11-03',
-			7.6,
-			'https://placehold.co/500x750/0f1f1a/86efac/png?text=Monsoon+Diaries',
+			'Oppenheimer',
+			'The story of J. Robert Oppenheimer and the Manhattan Project during World War II.',
+			'Biography',
+			'English',
+			180,
+			'2023-07-21',
+			8.4,
+			'https://upload.wikimedia.org/wikipedia/en/4/4a/Oppenheimer_%28film%29.jpg',
 			TRUE,
 			NOW(),
 			NOW()
 		),
 		(
 			'mov_003',
-			'The Last Ticket',
-			'A train journey forces two strangers to rewrite their destinies.',
-			'Romance',
-			'Telugu',
-			121,
-			'2024-02-09',
-			8.1,
-			'https://placehold.co/500x750/1a0f14/fbcfe8/png?text=The+Last+Ticket',
+			'Barbie',
+			'Barbie and Ken have the time of their lives in the real world.',
+			'Comedy',
+			'English',
+			114,
+			'2023-07-21',
+			6.9,
+			'https://upload.wikimedia.org/wikipedia/en/0/0b/Barbie_2023_poster.jpg',
+			TRUE,
+			NOW(),
+			NOW()
+		),
+		(
+			'mov_004',
+			'Spider-Man: Across the Spider-Verse',
+			'Miles Morales catapults across the multiverse with a team of Spider-People.',
+			'Animation',
+			'English',
+			140,
+			'2023-06-02',
+			8.4,
+			'https://upload.wikimedia.org/wikipedia/en/b/b4/Spider-Man-_Across_the_Spider-Verse_poster.jpg',
+			TRUE,
+			NOW(),
+			NOW()
+		),
+		(
+			'mov_005',
+			'John Wick: Chapter 4',
+			'John Wick uncovers a path to defeating the High Table.',
+			'Action',
+			'English',
+			169,
+			'2023-03-24',
+			7.7,
+			'https://upload.wikimedia.org/wikipedia/en/d/d0/John_Wick_-_Chapter_4_promotional_poster.jpg',
+			TRUE,
+			NOW(),
+			NOW()
+		),
+		(
+			'mov_006',
+			'The Dark Knight',
+			'Batman faces the Joker as he wreaks havoc on Gotham City.',
+			'Action',
+			'English',
+			152,
+			'2008-07-18',
+			9.0,
+			'https://upload.wikimedia.org/wikipedia/en/1/1c/The_Dark_Knight_%282008_film%29.jpg',
+			TRUE,
+			NOW(),
+			NOW()
+		),
+		(
+			'mov_007',
+			'Inception',
+			'A thief who steals secrets through dreams is offered a shot at redemption.',
+			'Sci-Fi',
+			'English',
+			148,
+			'2010-07-16',
+			8.8,
+			'https://upload.wikimedia.org/wikipedia/en/2/2e/Inception_%282010%29_theatrical_poster.jpg',
+			TRUE,
+			NOW(),
+			NOW()
+		),
+		(
+			'mov_008',
+			'Everything Everywhere All at Once',
+			'An unlikely hero must save the multiverse when her family and taxes collide.',
+			'Action',
+			'English',
+			139,
+			'2022-03-25',
+			7.8,
+			'https://upload.wikimedia.org/wikipedia/en/1/1e/Everything_Everywhere_All_at_Once.jpg',
 			TRUE,
 			NOW(),
 			NOW()
 		)
-	ON CONFLICT (id) DO NOTHING;
+	ON CONFLICT (id) DO UPDATE SET
+		title = EXCLUDED.title,
+		description = EXCLUDED.description,
+		genre = EXCLUDED.genre,
+		language = EXCLUDED.language,
+		duration_minutes = EXCLUDED.duration_minutes,
+		release_date = EXCLUDED.release_date,
+		rating = EXCLUDED.rating,
+		poster_url = EXCLUDED.poster_url,
+		is_active = EXCLUDED.is_active,
+		updated_at = NOW();
 	`
 
 	if _, err := db.ExecContext(ctx, seedMoviesQuery); err != nil {
 		return err
-	}
-
-	patchPosters := []struct {
-		id  string
-		url string
-	}{
-		{"mov_001", "https://placehold.co/500x750/0c1222/7dd3fc/png?text=Starlight+Horizon"},
-		{"mov_002", "https://placehold.co/500x750/0f1f1a/86efac/png?text=Monsoon+Diaries"},
-		{"mov_003", "https://placehold.co/500x750/1a0f14/fbcfe8/png?text=The+Last+Ticket"},
-	}
-	for _, p := range patchPosters {
-		if _, err := db.ExecContext(ctx,
-			`UPDATE movies SET poster_url = $2, updated_at = NOW() WHERE id = $1`,
-			p.id, p.url,
-		); err != nil {
-			return err
-		}
 	}
 
 	seedTheatersQuery := `
@@ -422,10 +489,20 @@ func ensureSchema(ctx context.Context, db *sql.DB) error {
 			VALUES
 				('mov_001', 'th_001', 'Screen 1', '11 hours'::interval, 'English', '2D', 12.00::numeric),
 				('mov_001', 'th_002', 'Screen 2', '18 hours'::interval, 'English', 'IMAX', 12.00::numeric),
-				('mov_002', 'th_001', 'Screen 2', '10 hours 30 minutes'::interval, 'Hindi', '2D', 12.00::numeric),
-				('mov_002', 'th_004', 'Screen 3', '17 hours 30 minutes'::interval, 'Hindi', '2D', 12.00::numeric),
-				('mov_003', 'th_003', 'Screen B', '12 hours 15 minutes'::interval, 'Telugu', '2D', 12.00::numeric),
-				('mov_003', 'th_005', 'Screen 2', '19 hours 15 minutes'::interval, 'Telugu', '2D', 12.00::numeric)
+				('mov_002', 'th_001', 'Screen 2', '10 hours 30 minutes'::interval, 'English', '2D', 12.00::numeric),
+				('mov_002', 'th_004', 'Screen 3', '17 hours 30 minutes'::interval, 'English', '2D', 12.00::numeric),
+				('mov_003', 'th_003', 'Screen B', '12 hours 15 minutes'::interval, 'English', '2D', 12.00::numeric),
+				('mov_003', 'th_005', 'Screen 2', '19 hours 15 minutes'::interval, 'English', '2D', 12.00::numeric),
+				('mov_004', 'th_001', 'Screen 3', '14 hours'::interval, 'English', '2D', 12.00::numeric),
+				('mov_004', 'th_004', 'Screen 1', '20 hours'::interval, 'English', '3D', 12.00::numeric),
+				('mov_005', 'th_002', 'Screen 3', '12 hours 45 minutes'::interval, 'English', '2D', 12.00::numeric),
+				('mov_005', 'th_003', 'Screen C', '18 hours 45 minutes'::interval, 'English', '2D', 12.00::numeric),
+				('mov_006', 'th_002', 'Screen 4', '16 hours'::interval, 'English', '2D', 12.00::numeric),
+				('mov_006', 'th_004', 'Screen 4', '21 hours 30 minutes'::interval, 'English', '2D', 12.00::numeric),
+				('mov_007', 'th_003', 'Screen A', '15 hours'::interval, 'English', '2D', 12.00::numeric),
+				('mov_007', 'th_005', 'Screen 1', '20 hours 30 minutes'::interval, 'English', '2D', 12.00::numeric),
+				('mov_008', 'th_001', 'Screen 4', '13 hours 15 minutes'::interval, 'English', '2D', 12.00::numeric),
+				('mov_008', 'th_005', 'Screen 3', '22 hours'::interval, 'English', '2D', 12.00::numeric)
 		) AS t(movie_id, theater_id, screen_name, time_of_day, language, format, base_price)
 	),
 	generated AS (

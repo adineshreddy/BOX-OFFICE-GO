@@ -55,7 +55,9 @@
                   <h2 class="greeting-title">{{ banner.title }}</h2>
                   <p class="greeting-subtitle">{{ banner.subtitle }}</p>
                   <p class="greeting-description">{{ banner.description }}</p>
-                  <button class="greeting-button">{{ banner.buttonText }}</button>
+                  <button type="button" class="greeting-button" disabled>
+                    {{ banner.buttonText }}
+                  </button>
                 </div>
               </div>
             }
@@ -85,14 +87,13 @@
   <!-- Recommended Movies Section -->
   <section class="recommended-section">
     <div class="section-header">
-      <h2 class="section-title">Recommended Movies</h2>
-      <button type="button" class="see-all-link" (click)="onSeeAllClick($event)">
-        @if (auth.isLoggedInSignal() && catalogExpanded()) {
-          Show less
-        } @else {
-          See All &gt;
-        }
-      </button>
+      <div class="section-title-wrap">
+        <h2 class="section-title">Recommended Movies</h2>
+        <p class="section-subtitle">
+          Showing what is playing across our theaters — pick a poster to see showtimes.
+        </p>
+      </div>
+      <a routerLink="/movies" class="see-all-link">See all movies</a>
     </div>
 
     <div class="movies-container">
